@@ -8,6 +8,7 @@
 #include <linux/netfilter.h>
 #include <time.h>
 #include <sys/poll.h>
+#include <signal.h>
 
 #include <gtk/gtk.h>
 #include <glib.h>
@@ -24,6 +25,12 @@ GList *app_list = NULL, *deny_list = NULL;
 int my_compare_func(GString *A,GString *B)
 {
 	return (g_string_equal(A,B))?0:1;
+}
+
+void signal_quit(int signum)
+{
+	printf("Exiting...");
+	gtk_main_quit();
 }
 
 int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
@@ -121,6 +128,8 @@ int main(int argc, char** argv)
 	int htimeout;
 	gpointer my_callback_data;
 	gtk_init(&argc,&argv);
+	signal(SIGTERM,signal_quit);
+	signal(SIGINT,signal_quit);
 	htimeout=g_timeout_add((guint32)1,timer_callback, my_callback_data);
 	printf("Opening connection\n");
   handle=nfq_open();
@@ -178,4 +187,6 @@ int main(int argc, char** argv)
 	printf("Destroy handle\n");
   nfq_close(handle);  
 	g_source_remove(htimeout);
+	printf("Finished\n");
+	exit(0);
 };
