@@ -121,7 +121,7 @@ int main(int argc, char** argv)
 	int htimeout;
 	gpointer my_callback_data;
 	gtk_init(&argc,&argv);
-	htimeout=gtk_timeout_add((guint32)1,timer_callback, my_callback_data);
+	htimeout=g_timeout_add((guint32)1,timer_callback, my_callback_data);
 	printf("Opening connection\n");
   handle=nfq_open();
 	if (!handle)
@@ -177,5 +177,5 @@ int main(int argc, char** argv)
 	nfq_destroy_queue(qhandle);
 	printf("Destroy handle\n");
   nfq_close(handle);  
-	gtk_timeout_remove(htimeout);
+	g_source_remove(htimeout);
 };
