@@ -16,11 +16,13 @@
 #include "misc.h"
 #include "sockproc.h"
 
-struct nfq_handle *handle;
-struct nfq_q_handle *qhandle;
-int fd,rv;
+struct nfq_handle *in_handle, *out_handle;
+struct nfq_q_handle *in_qhandle, *out_qhandle;
+int out_fd,in_fd,rv;
 char buf[2048];
 GList *app_list = NULL, *deny_list = NULL;
+GData *applist;
+
 
 int my_compare_func(GString *A,GString *B)
 {
@@ -67,24 +69,16 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 	get_proc_from_conn(&cn,name,sizeof(name));
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
-	/*printf("Program:%s\n",name);
-	printf("Accept packet:\n");
-	scanf("%s", rbuf);
-	if (rbuf[0] == 'y')
-	{
-	   return nfq_set_verdict(qhandle,id,NF_ACCEPT,plen,payload);	
-	};
-  return nfq_set_verdict(qhandle,id,NF_DROP,plen,payload);*/
 	pr_name = g_string_new(name);
 	if (g_list_find_custom(app_list,pr_name,my_compare_func) != NULL)
 	{
 		printf("Program %s found in list, accepting\n",name);
-		return nfq_set_verdict(qhandle,id,NF_ACCEPT,plen,payload);
+		return nfq_set_verdict(out_qhandle,id,NF_ACCEPT,plen,payload);
 	}
 	if (g_list_find_custom(deny_list,pr_name,my_compare_func) != NULL)
 	{
 		printf("Program %s found in list, denying\n",name);
-		return nfq_set_verdict(qhandle,id,NF_DROP,plen,payload);
+		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
 	}
 	GtkMessageDialog* dialog;
 	dialog = gtk_message_dialog_new(NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
@@ -94,77 +88,147 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 	if (resp == GTK_RESPONSE_YES)
 	{
 		app_list = g_list_prepend(app_list,pr_name);
-		return nfq_set_verdict(qhandle,id,NF_ACCEPT,plen,payload);	
+		return nfq_set_verdict(out_qhandle,id,NF_ACCEPT,plen,payload);	
 	}
 	else
 	{
 		deny_list = g_list_prepend(deny_list,pr_name);
-		return nfq_set_verdict(qhandle,id,NF_DROP,plen,payload);
+		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
 	}
 };
 
-struct pollfd polls;
+int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
+{
+	struct nfqnl_msg_packet_hdr *ph;
+	char* payload;
+	int id, plen;
+  printf("Callback called\n");
+	ph = nfq_get_msg_packet_hdr(nfad);
+	id = ntohl(ph->packet_id);
+	plen = nfq_get_payload(nfad, &payload);
+	printf("Inbound connection, accepting (yet)\n");
+	return nfq_set_verdict(in_qhandle,id,NF_ACCEPT,plen,payload);	
+};
+
+
+struct pollfd polls[2];
 struct timespec ival;
 gint timer_callback(gpointer data)
 {
+		int i;
 		ival.tv_sec = 0;
 		ival.tv_nsec = 1000;
-	  polls.fd = fd;
-		polls.events = POLLIN | POLLPRI;
-		poll(&polls,1,1);
-		if ( (polls.revents & POLLIN) || (polls.revents & POLLPRI) )
+	  polls[0].fd = out_fd;
+		polls[0].events = POLLIN | POLLPRI;
+		polls[1].fd = in_fd;
+		polls[1].events = POLLIN | POLLPRI;
+		poll(polls,2,1);
+		if ( (polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI) )
 		{
-			while ((rv = recv(fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
+			while ((rv = recv(out_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
   		{
     		printf("Packet received\n");
-    		nfq_handle_packet(handle,buf,rv);
+    		nfq_handle_packet(out_handle,buf,rv);
+  		}
+		}
+		if ( (polls[1].revents & POLLIN) || (polls[1].revents & POLLPRI) )
+		{
+			while ((rv = recv(in_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
+  		{
+    		printf("Packet received\n");
+    		nfq_handle_packet(in_handle,buf,rv);
   		}
 		}
 	return 1;
 };
+
+int init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd,nfq_callback *cb,int queue_num)
+{
+	(*handle) = nfq_open();
+	if (!(*handle))
+	{
+		perror("Error occured during opening queue");
+		exit(1);
+	}
+	if (nfq_unbind_pf((*handle),AF_INET) < 0)
+	{
+		perror("Unbinding");
+		exit(1);
+	}
+	printf("Binding protocol\n");
+	if (nfq_bind_pf((*handle),AF_INET)<0)
+	{
+		perror("Binding");
+		exit(1);
+	}
+	printf("Creating queue\n");
+	(*qhandle)=nfq_create_queue((*handle),queue_num,cb,NULL);
+	if (!(*qhandle))
+	{
+		perror("Creating queue");
+		exit(1);
+	}
+	printf("Setting mode\n");
+	if (nfq_set_mode((*qhandle),NFQNL_COPY_PACKET,0) < 0)
+	{
+		perror("Error setting queue mode");
+	}
+	(*fd) = nfq_fd((*handle));
+	printf("Fd: %d\n",(*fd));
+
+}
+
+int close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
+{
+	printf("Destroy queue\n");
+	nfq_destroy_queue(qhandle);
+	printf("Destroy handle\n");
+  nfq_close(handle);  
+}
 
 int main(int argc, char** argv)
 {
 	int htimeout;
 	gpointer my_callback_data;
 	gtk_init(&argc,&argv);
+	g_datalist_init(&applist);
 	signal(SIGTERM,signal_quit);
 	signal(SIGINT,signal_quit);
 	htimeout=g_timeout_add((guint32)1,timer_callback, my_callback_data);
 	printf("Opening connection\n");
-  handle=nfq_open();
-	if (!handle)
+ /* in_handle=nfq_open();
+	if (!in_handle)
 	{
 		perror("Error occured at opening queue:");
 		exit(1);
 	}
-	//printf("Creating queue\n");
-	//qhandle=nfq_create_queue(handle,1,queue_cb,NULL);
-	if (nfq_unbind_pf(handle,AF_INET)<0)
+	if (nfq_unbind_pf(in_handle,AF_INET)<0)
 	{
 		perror("Unbinding");
 		exit(1);
 	}
 	printf("Binding protocol\n");
-	if (nfq_bind_pf(handle,AF_INET)<0)
+	if (nfq_bind_pf(in_handle,AF_INET)<0)
 	{
 		perror("Binding");
 		exit(1);
 	}
 	printf("Creating queue\n");
-	qhandle=nfq_create_queue(handle,0,queue_cb,NULL);
-	if (!qhandle)
+	in_qhandle=nfq_create_queue(in_handle,0,queue_cb,NULL);
+	if (!in_qhandle)
 	{
 		perror("Creating queue");
 		exit(1);
 	}
 	printf("Setting mode\n");
-	if (nfq_set_mode(qhandle,NFQNL_COPY_PACKET,0) < 0)
+	if (nfq_set_mode(in_qhandle,NFQNL_COPY_PACKET,0) < 0)
 	{
 		perror("Error setting queue mode");
 	}
-	fd = nfq_fd(handle);
-	printf("Fd: %d\n",fd);
+	in_fd = nfq_fd(in_handle);
+	printf("Fd: %d\n",in_fd);*/
+	init_queue(&in_handle,&in_qhandle,&in_fd,in_queue_cb,1);
+	init_queue(&out_handle,&out_qhandle,&out_fd,queue_cb,0);
 	/*while ((rv = recv(fd,buf,sizeof(buf),0)) && rv>=0)
 	{
 		printf("Packet received\n");
@@ -182,11 +246,9 @@ int main(int argc, char** argv)
 		}
 	}*/
 	gtk_main();
-	printf("Destroy queue\n");
-	nfq_destroy_queue(qhandle);
-	printf("Destroy handle\n");
-  nfq_close(handle);  
 	g_source_remove(htimeout);
+	close_queue(out_handle,out_qhandle);
+	close_queue(in_handle,in_qhandle);
 	printf("Finished\n");
 	exit(0);
 };
