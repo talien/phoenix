@@ -66,7 +66,7 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 	cn.dport = dport;
 	strncpy(cn.dest,payload+16,4);
 	strncpy(cn.src,payload+12,4);
-	get_proc_from_conn(&cn,name,sizeof(name));
+	get_proc_from_conn(&cn,name,sizeof(name),OUTBOUND);
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
 	pr_name = g_string_new(name);
@@ -101,13 +101,39 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 {
 	struct nfqnl_msg_packet_hdr *ph;
 	char* payload;
-	int id, plen;
+	unsigned int id = 0, plen = 0, headlen, dport, sport;
+	int res;
+	struct conn cn;
+	char name[100], srcip[20], destip[20];
   printf("Callback called\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
 	plen = nfq_get_payload(nfad, &payload);
-	printf("Inbound connection, accepting (yet)\n");
-	return nfq_set_verdict(in_qhandle,id,NF_ACCEPT,plen,payload);	
+	headlen = (payload[0] % 16) * 4;
+	sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
+	dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
+	write_ip(payload + 12);
+	printf(":%u ->", sport);
+	write_ip(payload + 16);
+	printf(":%u\n", dport);
+	cn.sport = sport;
+	cn.dport = dport;
+	strncpy(cn.dest,payload+16,4);
+	strncpy(cn.src,payload+12,4);
+	res = get_proc_from_conn(&cn,name,sizeof(name),INBOUND);
+	swrite_ip(payload + 12,srcip,0);
+	swrite_ip(payload + 16,destip,0);
+  if (res != -1)
+	{
+		printf("Packet received:%s:%d -> %s:%d on program %s\n",srcip,sport,destip,dport,name);
+		printf("Inbound connection on listening port, accepting (yet)\n");
+		return nfq_set_verdict(in_qhandle,id,NF_ACCEPT,plen,payload);	
+	}
+	else
+	{
+		printf("Nothing listens on this port, dropping\n");
+	 	return nfq_set_verdict(in_qhandle,id,NF_DROP,plen,payload);	
+	}
 };
 
 

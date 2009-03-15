@@ -10,6 +10,9 @@
 
 #include "misc.h"
 
+#define INBOUND 1
+#define OUTBOUND 0
+
 struct conn {
 	int sport;
 	char src[4];
@@ -17,13 +20,14 @@ struct conn {
 	char dest[4];
 };
 
-int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen)
+int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen, int direction)
 {
 	static const char* fname="/proc/net/tcp";
 	FILE *tcp=fopen(fname,"r");
 	char buf[256];
 	int lnum=0;
 	int pid;
+	const char nullip[4] = { 0,0,0,0 };
 	if (!tcp)
 	{
 		perror("Error opening file:");
@@ -78,30 +82,61 @@ int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen)
 				flen++;
 		}
 		lnum++;
-		if ( (dport == c->dport && sport == c->sport && !strncmp(s,c->src,4) && !strncmp(d,c->dest,4) ) ||
-			(dport == c->sport && sport == c->dport && !strncmp(s,c->dest,4) && !strncmp(d,c->src,4) ) )
+		if (direction == OUTBOUND)
 		{
-			char fname[100];
-			char procname[1024];
-			int pnlen;
+			if ( (dport == c->dport && sport == c->sport && !strncmp(s,c->src,4) && !strncmp(d,c->dest,4) ) ||
+				(dport == c->sport && sport == c->dport && !strncmp(s,c->dest,4) && !strncmp(d,c->src,4) ) )
+			{
+				char fname[100];
+				char procname[1024];
+				int pnlen;
 //			printf("Matches!\n");
 //			write_ip(s);
 //			printf("Source port:%d\n",sport);
 //	 		write_ip(d);
 //			printf("Dest port:%d\n",dport);
 //			printf("Socket id:%u\n",socknum);
-			pid = get_pid_from_sock(socknum);
+				pid = get_pid_from_sock(socknum);
 //			printf("Pid:%d\n",pid);
-			sprintf(fname,"/proc/%d/exe",pid);
-			pnlen = readlink(fname,procname,sizeof(procname));
-			procname[pnlen] = '\0';
+				sprintf(fname,"/proc/%d/exe",pid);
+				pnlen = readlink(fname,procname,sizeof(procname));
+				procname[pnlen] = '\0';
 //			printf("Program:%s\n",procname);
-			if (namebuflen < pnlen + 1)
-			{
-				return -1;
+				if (namebuflen < pnlen + 1)
+				{
+					return -1;
+				}
+				strncpy(namebuf,procname,pnlen + 1);
+				return pnlen + 1;
 			}
-			strncpy(namebuf,procname,pnlen + 1);
-			return pnlen + 1;
+		}
+		else
+		{
+			//printf("INBOUND:sport %d, dport %d\n",sport,c->dport);
+			if ( (sport == c->dport) && ( !strncmp(s,nullip,4) || !strncmp(c->dest,s,4) ) )
+			{
+				char fname[100];
+        char procname[1024];
+        int pnlen;
+        //printf("Matches!\n");
+//      write_ip(s);
+//      printf("Source port:%d\n",sport);
+//      write_ip(d);
+//      printf("Dest port:%d\n",dport);
+//      printf("Socket id:%u\n",socknum);
+        pid = get_pid_from_sock(socknum);
+//      printf("Pid:%d\n",pid);
+        sprintf(fname,"/proc/%d/exe",pid);
+        pnlen = readlink(fname,procname,sizeof(procname));
+        procname[pnlen] = '\0';
+//      printf("Program:%s\n",procname);
+        if (namebuflen < pnlen + 1)
+        {
+          return -1;
+        }
+        strncpy(namebuf,procname,pnlen + 1);
+        return pnlen + 1;
+			}
 		}
 	}
 	fclose(tcp);
