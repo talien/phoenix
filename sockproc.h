@@ -9,18 +9,19 @@
 #include <string.h>
 
 #include "misc.h"
+#include "types.h"
 
 #define INBOUND 1
 #define OUTBOUND 0
 
-struct conn {
+/*struct conn {
 	int sport;
 	char src[4];
 	int dport;
 	char dest[4];
-};
+};*/
 
-int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen, int direction)
+int get_proc_from_conn(struct phx_conn_data* c,/*char* namebuf,int namebuflen,*/ int direction)
 {
 	static const char* fname="/proc/net/tcp";
 	FILE *tcp=fopen(fname,"r");
@@ -84,8 +85,8 @@ int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen, int directio
 		lnum++;
 		if (direction == OUTBOUND)
 		{
-			if ( (dport == c->dport && sport == c->sport && !strncmp(s,c->src,4) && !strncmp(d,c->dest,4) ) ||
-				(dport == c->sport && sport == c->dport && !strncmp(s,c->dest,4) && !strncmp(d,c->src,4) ) )
+			if ( (dport == c->dport && sport == c->sport && !strncmp(s,c->srcip,4) && !strncmp(d,c->destip,4) ) ||
+				(dport == c->sport && sport == c->dport && !strncmp(s,c->destip,4) && !strncmp(d,c->srcip,4) ) )
 			{
 				char fname[100];
 				char procname[1024];
@@ -96,24 +97,25 @@ int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen, int directio
 //	 		write_ip(d);
 //			printf("Dest port:%d\n",dport);
 //			printf("Socket id:%u\n",socknum);
-				pid = get_pid_from_sock(socknum);
+				c->pid = get_pid_from_sock(socknum);
 //			printf("Pid:%d\n",pid);
-				sprintf(fname,"/proc/%d/exe",pid);
+				sprintf(fname,"/proc/%d/exe",c->pid);
 				pnlen = readlink(fname,procname,sizeof(procname));
 				procname[pnlen] = '\0';
 //			printf("Program:%s\n",procname);
-				if (namebuflen < pnlen + 1)
+				/*if (namebuflen < pnlen + 1)
 				{
 					return -1;
-				}
-				strncpy(namebuf,procname,pnlen + 1);
+				}*/
+				//strncpy(namebuf,procname,pnlen + 1);
+				c->proc_name = g_string_new(procname);
 				return pnlen + 1;
 			}
 		}
 		else
 		{
 			//printf("INBOUND:sport %d, dport %d\n",sport,c->dport);
-			if ( (sport == c->dport) && ( !strncmp(s,nullip,4) || !strncmp(c->dest,s,4) ) )
+			if ( (sport == c->dport) && ( !strncmp(s,nullip,4) || !strncmp(c->destip,s,4) ) )
 			{
 				char fname[100];
         char procname[1024];
@@ -124,17 +126,18 @@ int get_proc_from_conn(struct conn* c,char* namebuf,int namebuflen, int directio
 //      write_ip(d);
 //      printf("Dest port:%d\n",dport);
 //      printf("Socket id:%u\n",socknum);
-        pid = get_pid_from_sock(socknum);
+        c->pid = get_pid_from_sock(socknum);
 //      printf("Pid:%d\n",pid);
-        sprintf(fname,"/proc/%d/exe",pid);
+        sprintf(fname,"/proc/%d/exe",c->pid);
         pnlen = readlink(fname,procname,sizeof(procname));
         procname[pnlen] = '\0';
 //      printf("Program:%s\n",procname);
-        if (namebuflen < pnlen + 1)
+        /*if (namebuflen < pnlen + 1)
         {
           return -1;
-        }
-        strncpy(namebuf,procname,pnlen + 1);
+        }*/
+        //strncpy(namebuf,procname,pnlen + 1);
+				c->proc_name = g_string_new(procname);
         return pnlen + 1;
 			}
 		}
