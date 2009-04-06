@@ -200,16 +200,17 @@ struct pollfd polls[4];
 struct timespec ival;
 gint timer_callback(gpointer data)
 {
-		int i;
-		ival.tv_sec = 0;
-		ival.tv_nsec = 1000;
-	  polls[0].fd = out_fd;
-		polls[0].events = POLLIN | POLLPRI;
-		polls[1].fd = in_fd;
-		polls[1].events = POLLIN | POLLPRI;
-    polls[2].fd = out_pending_fd;
-    polls[2].events = POLLIN | POLLPRI;
-		poll(polls,3,1);
+	int i;
+  int ret;
+  polls[0].fd = out_fd;
+	polls[0].events = POLLIN | POLLPRI;
+	polls[1].fd = in_fd;
+	polls[1].events = POLLIN | POLLPRI;
+  polls[2].fd = out_pending_fd;
+  polls[2].events = POLLIN | POLLPRI;
+	ret = poll(polls,3,20);
+	if (ret > 0)
+	{
 		if ( (polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI) )
 		{
 			while ((rv = recv(out_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
@@ -232,7 +233,6 @@ gint timer_callback(gpointer data)
 		{
       gui_signal = 0;
 			for (i = 0; i < pending_conn_count; i++)
-//			while ((rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
   		{
 				rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
 				if (rv > 0)
@@ -242,8 +242,8 @@ gint timer_callback(gpointer data)
 					printf("Packet handled\n");
 				}
   		}
-		}
-
+		 }
+   }
 	return 1;
 };
 
@@ -298,7 +298,7 @@ gpointer daemon_thread(gpointer data)
 	while(1)
 	{
     timer_callback(NULL);
-		sleep(1);
+		sleep(0);
 	};
   printf("Thread exited!\n");
 	g_async_queue_unref(to_gui);
