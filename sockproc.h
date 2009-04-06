@@ -16,35 +16,17 @@
 
 /*struct conn {
 	int sport;
-	char src[4];
+1	char src[4];
 	int dport;
 	char dest[4];
 };*/
 
-int get_proc_from_conn(struct phx_conn_data* c,/*char* namebuf,int namebuflen,*/ int direction)
+void parse_tcp_line(char* buf,char *s,char *d,unsigned int *sp,unsigned int *dp, unsigned int * sn)
 {
-	static const char* fname="/proc/net/tcp";
-	FILE *tcp=fopen(fname,"r");
-	char buf[256];
-	int lnum=0;
-	int pid;
-	const char nullip[4] = { 0,0,0,0 };
-	if (!tcp)
-	{
-		perror("Error opening file:");
-		exit(1);
-	}
-	while ( fgets(buf,sizeof(buf),tcp) > 0)
-	{
-		int i;
-		int start;
-		char s[4];
-		char d[4];
-		unsigned int sport = 0,dport = 0, socknum = 0;
-		char prevchar = ' ';
-		int field = 0, flen = 0;
-//		printf("%s",buf);
-		for(i=0;buf[i] != '\0';i++)
+   unsigned int sport = 0, dport = 0, socknum = 0;
+   char prevchar = ' ';
+   int field = 0, flen = 0, i, start;
+	 for(i=0;buf[i] != '\0';i++)
 		{
 //			if (buf[i] == ' ')	printf("Tab found");
 		   	if ((prevchar == ' ' && buf[i] != ' ') || (prevchar == ':'))
@@ -82,6 +64,98 @@ int get_proc_from_conn(struct phx_conn_data* c,/*char* namebuf,int namebuflen,*/
 				prevchar = buf[i];
 				flen++;
 		}
+    *sp = sport;
+    *dp = dport;
+    *sn = socknum;
+};
+
+void parse_tcp6_line(char* buf,char *s,char *d,unsigned int *sp,unsigned int *dp, unsigned int * sn)
+{
+   unsigned int sport = 0, dport = 0, socknum = 0;
+   char prevchar = ' ';
+   int field = 0, flen = 0, i, start;
+   int ipv4field = 1; 
+	 for(i=0;buf[i] != '\0';i++)
+		{
+//			if (buf[i] == ' ')	printf("Tab found");
+		   	if ((prevchar == ' ' && buf[i] != ' ') || (prevchar == ':'))
+			 	{
+					field++;
+					flen = 0;
+				}
+				if ( (buf[i] != ' ') && (buf[i] != ':' ) )
+				{
+					if (field == 3)
+					{
+						// FIXME :  This code is platform dependent, fuck you retard, think it over
+						if ( (flen >= 0) && (flen <= 15) && (buf[i] != '0' ) ) ipv4field = 0;
+						if ( (flen >= 16) && (flen <=19) && ( (buf[i] != '0') && (buf[i] != 'F') ) ) ipv4field = 0;
+						if ( (flen >= 20) && (flen <= 23) && (buf[i] != '0' ) ) ipv4field = 0;
+						if ( (flen >= 24) && (ipv4field == 1) )
+						{
+							if (flen % 2 == 0) s[3-(flen-24)/2] = 0;
+							s[3-(flen-24)/2] = s[3-(flen-24)/2]*16 + (char)get_val_from_hex(buf[i]);
+						}
+					}
+					if (field == 4)
+					{
+						sport = sport*16 + get_val_from_hex(buf[i]);
+					}
+					if (field == 5)
+					{
+						// FIXME :  This code is platform dependent, fuck you retard, think it over
+            if ( (flen >= 0) && (flen <= 15) && (buf[i] != '0' ) ) ipv4field = 0;
+            if ( (flen >= 16) && (flen <=19) && ( (buf[i] != '0') && (buf[i] != 'F') ) ) ipv4field = 0;
+            if ( (flen >= 20) && (flen <= 23) && (buf[i] != '0' ) ) ipv4field = 0;
+            if ( (flen >= 24) && (ipv4field == 1) )
+            {
+              if (flen % 2 == 0) s[3-(flen-24)/2] = 0;
+              s[3-(flen-24)/2] = s[3-(flen-24)/2]*16 + (char)get_val_from_hex(buf[i]);
+            }
+
+					}
+					if (field == 6)
+					{
+						dport = dport*16 + get_val_from_hex(buf[i]);
+					}
+					if (field == 15)
+					{
+						socknum = socknum * 10 + (buf[i] - 48);
+					}
+				}
+				prevchar = buf[i];
+				flen++;
+		}
+    *sp = sport;
+    *dp = dport;
+    *sn = socknum;
+}
+
+
+int get_proc_from_conn(struct phx_conn_data* c,int direction)
+{
+	const char* fname = "/proc/net/tcp";
+  const char* f6name = "/proc/net/tcp6";
+	FILE *tcp = fopen(fname,"r");
+	char buf[512];
+	int lnum=0;
+	int pid;
+	const char nullip[4] = { 0,0,0,0 };
+	if (!tcp)
+	{
+		perror("Error opening file:");
+		exit(1);
+	}
+	while ( fgets(buf,sizeof(buf),tcp) > 0)
+	{
+		int i;
+		int start;
+		char s[4];
+		char d[4];
+		unsigned int sport = 0,dport = 0, socknum = 0;
+		char prevchar = ' ';
+		int field = 0, flen = 0;
+    parse_tcp_line(buf,s,d,&sport,&dport,&socknum);
 		lnum++;
 		if (direction == OUTBOUND)
 		{
@@ -91,58 +165,84 @@ int get_proc_from_conn(struct phx_conn_data* c,/*char* namebuf,int namebuflen,*/
 				char fname[100];
 				char procname[1024];
 				int pnlen;
-//			printf("Matches!\n");
-//			write_ip(s);
-//			printf("Source port:%d\n",sport);
-//	 		write_ip(d);
-//			printf("Dest port:%d\n",dport);
-//			printf("Socket id:%u\n",socknum);
 				c->pid = get_pid_from_sock(socknum);
-//			printf("Pid:%d\n",pid);
 				sprintf(fname,"/proc/%d/exe",c->pid);
 				pnlen = readlink(fname,procname,sizeof(procname));
 				procname[pnlen] = '\0';
-//			printf("Program:%s\n",procname);
-				/*if (namebuflen < pnlen + 1)
-				{
-					return -1;
-				}*/
-				//strncpy(namebuf,procname,pnlen + 1);
 				c->proc_name = g_string_new(procname);
 				return pnlen + 1;
 			}
 		}
 		else
 		{
-			//printf("INBOUND:sport %d, dport %d\n",sport,c->dport);
 			if ( (sport == c->dport) && ( !strncmp(s,nullip,4) || !strncmp(c->destip,s,4) ) )
 			{
 				char fname[100];
         char procname[1024];
         int pnlen;
-        //printf("Matches!\n");
-//      write_ip(s);
-//      printf("Source port:%d\n",sport);
-//      write_ip(d);
-//      printf("Dest port:%d\n",dport);
-//      printf("Socket id:%u\n",socknum);
         c->pid = get_pid_from_sock(socknum);
-//      printf("Pid:%d\n",pid);
         sprintf(fname,"/proc/%d/exe",c->pid);
         pnlen = readlink(fname,procname,sizeof(procname));
         procname[pnlen] = '\0';
-//      printf("Program:%s\n",procname);
-        /*if (namebuflen < pnlen + 1)
-        {
-          return -1;
-        }*/
-        //strncpy(namebuf,procname,pnlen + 1);
 				c->proc_name = g_string_new(procname);
         return pnlen + 1;
 			}
 		}
 	}
 	fclose(tcp);
+  tcp = fopen(f6name,"r");
+  lnum = 0;
+	if (!tcp)
+	{
+		perror("Error opening file:");
+		exit(1);
+	}
+  printf("Searching in tcp6 connections\n");
+	while ( fgets(buf,sizeof(buf),tcp) > 0)
+	{
+		int i;
+		int start;
+		char s[4];
+		char d[4];
+		unsigned int sport = 0,dport = 0, socknum = 0;
+		char prevchar = ' ';
+		int field = 0, flen = 0;
+    parse_tcp6_line(buf,s,d,&sport,&dport,&socknum);
+		lnum++;
+		if (direction == OUTBOUND)
+		{
+			if ( (dport == c->dport && sport == c->sport && !strncmp(s,c->srcip,4) && !strncmp(d,c->destip,4) ) ||
+				(dport == c->sport && sport == c->dport && !strncmp(s,c->destip,4) && !strncmp(d,c->srcip,4) ) )
+			{
+				char fname[100];
+				char procname[1024];
+				int pnlen;
+				c->pid = get_pid_from_sock(socknum);
+				sprintf(fname,"/proc/%d/exe",c->pid);
+				pnlen = readlink(fname,procname,sizeof(procname));
+				procname[pnlen] = '\0';
+				c->proc_name = g_string_new(procname);
+				return pnlen + 1;
+			}
+		}
+		else
+		{
+			if ( (sport == c->dport) && ( !strncmp(s,nullip,4) || !strncmp(c->destip,s,4) ) )
+			{
+				char fname[100];
+        char procname[1024];
+        int pnlen;
+        c->pid = get_pid_from_sock(socknum);
+        sprintf(fname,"/proc/%d/exe",c->pid);
+        pnlen = readlink(fname,procname,sizeof(procname));
+        procname[pnlen] = '\0';
+				c->proc_name = g_string_new(procname);
+        return pnlen + 1;
+			}
+		}
+	}
+	fclose(tcp);
+	
 	return -1;
 };
 

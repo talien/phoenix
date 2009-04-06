@@ -17,15 +17,17 @@
 #include "sockproc.h"
 #include "types.h"
 
-struct nfq_handle *in_handle, *out_handle;
-struct nfq_q_handle *in_qhandle, *out_qhandle;
-int out_fd,in_fd,rv;
+struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle;
+struct nfq_q_handle *in_qhandle, *out_qhandle,*in_pending_qhandle,*out_pending_qhandle;
+int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
 char buf[2048];
 GList *app_list = NULL, *deny_list = NULL, *pending_list = NULL;
 GData *applist;
 GAsyncQueue *to_gui,*to_daemon,*wakeup;
 static GStaticMutex timer_mutex = G_STATIC_MUTEX_INIT;
 GList *pack_id_list = NULL;
+int gui_signal = 0;
+int pending_conn_count = 0;
 
 int phx_data_extract(char* payload, struct phx_conn_data *cdata)
 {
@@ -52,38 +54,32 @@ void signal_quit(int signum)
 int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
 {
 	int id = 0;
-	int plen = 0;
+	int plen = 0, extr_res = 0;
 	struct nfqnl_msg_packet_hdr *ph;
 	char* payload;
-//	char rbuf[1024];
-//	unsigned int dport, sport;
-//	char name[1024];
 	char srcip[20];
 	char destip[20];
-//	int* res;
   struct phx_conn_data *conndata, *resdata = NULL;
-	//GString *pr_name;
 	printf("Callback called\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
 	plen = nfq_get_payload(nfad, &payload);
 	printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
-  phx_data_extract(payload,conndata);
+  extr_res = phx_data_extract(payload,conndata);
+  if (extr_res == -1)
+	{
+    printf("Connection timeouted, dropping packet\n");
+		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);	
+	} 
 	//dumphex(payload,plen);
 //	printf("Header len:%u bytes\n", headlen);
 	write_ip(payload + 12); printf(":%d\n",conndata->sport);
 //	printf(":%u ->", sport);
 	write_ip(payload + 16); printf(":%d\n",conndata->dport);
 //	printf(":%u\n", dport);
-	//cn.sport = sport;
-	//cn.dport = dport;
-	//strncpy(cn.dest,payload+16,4);
-	//strncpy(cn.src,payload+12,4);
-	//get_proc_from_conn(&cn,name,sizeof(name),OUTBOUND);
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
-	//pr_name = g_string_new(conndata->proc_name->str);
   resdata = g_async_queue_try_pop(to_daemon);
   if (resdata)
 	{
@@ -98,6 +94,7 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 				deny_list = g_list_prepend(deny_list,resdata->proc_name);
 				g_free(resdata);
      }
+		 gui_signal = 1;
 	}
 	if (g_list_find_custom(app_list,conndata->proc_name,my_compare_func) != NULL)
 	{
@@ -119,20 +116,8 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 		pending_list = g_list_prepend(pending_list,conndata->proc_name);
   }
   printf("Data pushed to queue\n");
-	//res = (int*)g_async_queue_pop(to_daemon);
-	/*if ((*res) == 1)
-	{
-		app_list = g_list_prepend(app_list,pr_name);
-		free(res);
-		return nfq_set_verdict(out_qhandle,id,NF_ACCEPT,plen,payload);	
-	}
-	else
-	{
-		deny_list = g_list_prepend(deny_list,pr_name);
-		free(res);
-		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
-	}*/
-	return nfq_set_verdict(out_qhandle,id,NF_REPEAT,plen,payload);
+  pending_conn_count++;
+	return nfq_set_verdict_mark(out_qhandle,id,NF_REPEAT,htonl(0x2),plen,payload);
 };
 
 int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
@@ -148,18 +133,6 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 	id = ntohl(ph->packet_id);
 	plen = nfq_get_payload(nfad, &payload);
   conndata = g_new0(struct phx_conn_data,1);
-	/*headlen = (payload[0] % 16) * 4;
-	sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
-	dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
-	write_ip(payload + 12);
-	printf(":%u ->", sport);
-	write_ip(payload + 16);
-	printf(":%u\n", dport);
-	cn.sport = sport;
-	cn.dport = dport;
-	strncpy(cn.dest,payload+16,4);
-	strncpy(cn.src,payload+12,4);
-	res = get_proc_from_conn(&cn,name,sizeof(name),INBOUND);*/
 	res = phx_data_extract(payload,conndata);
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
@@ -171,13 +144,59 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 	}
 	else
 	{
-		printf("Nothing listens on this port, dropping\n");
+		printf("Nothing listens on port %d, dropping\n",conndata->dport);
 	 	return nfq_set_verdict(in_qhandle,id,NF_DROP,plen,payload);	
 	}
 };
 
+int out_pending_cb(struct nfq_q_handle *qh, struct nfqgenmsg *mfmsg, struct nfq_data *nfad, void* data)
+{
+  int id = 0, plen = 0, extr_res = 0;
+  struct nfqnl_msg_packet_hdr *ph;
+	char* payload;
+	char srcip[20];
+	char destip[20];
+  struct phx_conn_data *conndata, *resdata = NULL;
+  printf("Out pending callback called\n");
+  ph = nfq_get_msg_packet_hdr(nfad);
+  id = ntohl(ph->packet_id);
+  plen = nfq_get_payload(nfad, &payload);
+  printf("Payload length:%d\n",plen);
+  conndata = g_new0(struct phx_conn_data,1);
+  extr_res = phx_data_extract(payload,conndata);
+  if (extr_res == -1)
+	{
+     printf("Connection timeouted, dropping packet\n");
+     return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);	
+	}
+  //dumphex(payload,plen);
+//  printf("Header len:%u bytes\n", headlen);
+  write_ip(payload + 12); printf(":%d\n",conndata->sport);
+//  printf(":%u ->", sport);
+  write_ip(payload + 16); printf(":%d\n",conndata->dport);
+//  printf(":%u\n", dport);
+  swrite_ip(payload + 12,srcip,0);
+  swrite_ip(payload + 16,destip,0);
+	if (g_list_find_custom(app_list,conndata->proc_name,my_compare_func) != NULL)
+	{
+		printf("Program %s found in list, accepting\n",conndata->proc_name->str);
+		g_string_free(conndata->proc_name,TRUE);
+		g_free(conndata);
+	  pending_conn_count--;	
+		return nfq_set_verdict(out_pending_qhandle,id,NF_ACCEPT,plen,payload);
+	}
+	if (g_list_find_custom(deny_list,conndata->proc_name,my_compare_func) != NULL)
+	{
+		printf("Program %s found in list, denying\n",conndata->proc_name->str);
+		g_string_free(conndata->proc_name,TRUE);
+		g_free(conndata);
+    pending_conn_count--;
+		return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
+	}
+	return nfq_set_verdict(out_pending_qhandle,id,NF_QUEUE,plen,payload);
+};
 
-struct pollfd polls[2];
+struct pollfd polls[4];
 struct timespec ival;
 gint timer_callback(gpointer data)
 {
@@ -188,7 +207,9 @@ gint timer_callback(gpointer data)
 		polls[0].events = POLLIN | POLLPRI;
 		polls[1].fd = in_fd;
 		polls[1].events = POLLIN | POLLPRI;
-		poll(polls,2,1);
+    polls[2].fd = out_pending_fd;
+    polls[2].events = POLLIN | POLLPRI;
+		poll(polls,3,1);
 		if ( (polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI) )
 		{
 			while ((rv = recv(out_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
@@ -207,6 +228,22 @@ gint timer_callback(gpointer data)
 				printf("Packet handled\n");
   		}
 		}
+		if ( ((polls[2].revents & POLLIN) || (polls[2].revents & POLLPRI) ) && (gui_signal == 1) )
+		{
+      gui_signal = 0;
+			for (i = 0; i < pending_conn_count; i++)
+//			while ((rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
+  		{
+				rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
+				if (rv > 0)
+				{
+    			printf("Packet received\n");
+    			nfq_handle_packet(out_pending_handle,buf,rv);
+					printf("Packet handled\n");
+				}
+  		}
+		}
+
 	return 1;
 };
 
@@ -272,20 +309,15 @@ gpointer daemon_thread(gpointer data)
 
 gpointer gui_timer_callback(gpointer data)
 {
-//	gpointer qdata;
-//	GString *strdata;
-	//int* response;
   struct phx_conn_data *conndata;
 	conndata = (struct phx_conn_data*)g_async_queue_try_pop(to_gui);
 	if (!conndata) return 1;
 	g_printf("Data got:%s\n",conndata->proc_name);
 	GtkMessageDialog* dialog;
 	dialog = gtk_message_dialog_new(NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
-//								"A program %s wants to reach internet\n %s:%d -> %s:%d",name,srcip,sport,destip,dport);
 										"A program %s wants to reach internet\n :%d -> :%d",conndata->proc_name->str,conndata->sport,conndata->dport);
 	gint resp = gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy(dialog);	
- // response = malloc(sizeof(int));
  	if (resp == GTK_RESPONSE_YES)
 	{
 		conndata->state = ACCEPTED;
@@ -313,14 +345,16 @@ int main(int argc, char** argv)
 	g_datalist_init(&applist);
 	signal(SIGTERM,signal_quit);
 	signal(SIGINT,signal_quit);
-	htimeout=g_timeout_add((guint32)1,gui_timer_callback, my_callback_data);
+	htimeout=g_timeout_add((guint32)5,gui_timer_callback, my_callback_data);
 	printf("Opening connection\n");
  	init_queue(&in_handle,&in_qhandle,&in_fd,in_queue_cb,1);
 	init_queue(&out_handle,&out_qhandle,&out_fd,queue_cb,0);
+  init_queue(&out_pending_handle,&out_pending_qhandle,&out_pending_fd,out_pending_cb,3);
 	gtk_main();
 	g_source_remove(htimeout);
 	close_queue(out_handle,out_qhandle);
 	close_queue(in_handle,in_qhandle);
+  close_queue(out_pending_handle,out_pending_qhandle);
 	g_async_queue_unref(to_gui);
 	g_async_queue_unref(to_daemon);
 	printf("Finished\n");
