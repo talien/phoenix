@@ -1,0 +1,24 @@
+Célok:
+	- iptables szabályok, set mark
+	- zonazas
+	- grafikus GTK felulet
+Később:
+	- automatikus tűzfalazás (portscan detect, break-in-attempt detect).
+
+	main 	-  processing
+Gtimer		polling
+	|						|
+	V						V
+Gui			<-	callback
+	|						|
+	V						V
+Got			->	Accept or Drop:
+
+TODO:
+ - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!)
+ - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni).
+  - bejövő kapcsolatok tcp6-os problémáját megnézni!
+ - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
+ - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
+ - eventlog
+ - daemon-client modell
