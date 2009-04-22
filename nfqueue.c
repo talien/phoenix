@@ -29,7 +29,7 @@ GList *pack_id_list = NULL;
 int gui_signal = 0;
 int pending_conn_count = 0;
 
-int phx_data_extract(char* payload, struct phx_conn_data *cdata)
+int phx_data_extract(char* payload, struct phx_conn_data *cdata, int direction)
 {
   unsigned int headlen, sport, dport ;
 	headlen = (payload[0] % 16) * 4;
@@ -37,7 +37,7 @@ int phx_data_extract(char* payload, struct phx_conn_data *cdata)
 	cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
 	strncpy(cdata->destip,payload+16,4);
 	strncpy(cdata->srcip,payload+12,4);
-	return get_proc_from_conn(cdata,OUTBOUND);
+	return get_proc_from_conn(cdata,direction);
 };
 
 int my_compare_func(GString *A,GString *B)
@@ -60,26 +60,21 @@ int queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfa
 	char srcip[20];
 	char destip[20];
   struct phx_conn_data *conndata, *resdata = NULL;
-	printf("Callback called\n");
+	printf("==Outbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
 	plen = nfq_get_payload(nfad, &payload);
 	printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
-  extr_res = phx_data_extract(payload,conndata);
+  extr_res = phx_data_extract(payload,conndata,OUTBOUND);
   if (extr_res == -1)
 	{
     printf("Connection timeouted, dropping packet\n");
 		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);	
 	} 
-	//dumphex(payload,plen);
-//	printf("Header len:%u bytes\n", headlen);
-	write_ip(payload + 12); printf(":%d\n",conndata->sport);
-//	printf(":%u ->", sport);
-	write_ip(payload + 16); printf(":%d\n",conndata->dport);
-//	printf(":%u\n", dport);
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
+  printf("%s:%d -> %s:%d\n",srcip,conndata->sport,destip,conndata->dport);
   resdata = g_async_queue_try_pop(to_daemon);
   if (resdata)
 	{
@@ -128,12 +123,12 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 	int res;
 	char name[100], srcip[20], destip[20];
 	struct phx_conn_data* conndata;
-  printf("Callback called\n");
+  printf("==Inbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
 	plen = nfq_get_payload(nfad, &payload);
   conndata = g_new0(struct phx_conn_data,1);
-	res = phx_data_extract(payload,conndata);
+	res = phx_data_extract(payload,conndata,INBOUND);
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
   if (res != -1)
@@ -157,13 +152,13 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfqgenmsg *mfmsg, struct nfq_
 	char srcip[20];
 	char destip[20];
   struct phx_conn_data *conndata, *resdata = NULL;
-  printf("Out pending callback called\n");
+  printf("==Out pending callback called==\n");
   ph = nfq_get_msg_packet_hdr(nfad);
   id = ntohl(ph->packet_id);
   plen = nfq_get_payload(nfad, &payload);
   printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
-  extr_res = phx_data_extract(payload,conndata);
+  extr_res = phx_data_extract(payload,conndata,OUTBOUND);
   if (extr_res == -1)
 	{
      printf("Connection timeouted, dropping packet\n");
@@ -257,8 +252,8 @@ int init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd
 	}
 	if (nfq_unbind_pf((*handle),AF_INET) < 0)
 	{
-		perror("Unbinding");
-		exit(1);
+		perror("Unbinding, ignoring error");
+		//exit(1);
 	}
 	printf("Binding protocol\n");
 	if (nfq_bind_pf((*handle),AF_INET)<0)
