@@ -18,16 +18,21 @@
 #include "types.h"
 #include "callback.h"
 #include "data.h"
+
+struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle;
+static int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
+char buf[2048];
+
 int phx_data_extract(char* payload, struct phx_conn_data *cdata, int direction)
 {
-  unsigned int headlen, sport, dport ;
+  unsigned int headlen;
 	headlen = (payload[0] % 16) * 4;
   cdata->sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
 	cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
-	strncpy(cdata->destip,payload+16,4);
-	strncpy(cdata->srcip,payload+12,4);
+	strncpy((gchar*)cdata->destip,payload+16,4);
+	strncpy((gchar*)cdata->srcip,payload+12,4);
 	return get_proc_from_conn(cdata,direction);
-};
+}
 
 void signal_quit(int signum)
 {
@@ -84,9 +89,9 @@ gint timer_callback(gpointer data)
 		 }
    }
 	return 1;
-};
+}
 
-int init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd,nfq_callback *cb,int queue_num)
+void init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd,nfq_callback *cb,int queue_num)
 {
 	(*handle) = nfq_open();
 	if (!(*handle))
@@ -97,7 +102,7 @@ int init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd
 	if (nfq_unbind_pf((*handle),AF_INET) < 0)
 	{
 		perror("Unbinding, ignoring error");
-		//exit(1);
+		/*exit(1);*/
 	}
 	printf("Binding protocol\n");
 	if (nfq_bind_pf((*handle),AF_INET)<0)
@@ -122,7 +127,7 @@ int init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd
 
 }
 
-int close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
+void close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
 {
  printf("Destroy queue\n");
 	nfq_destroy_queue(qhandle);
@@ -144,19 +149,19 @@ gpointer daemon_thread(gpointer data)
 	g_async_queue_unref(to_daemon);
 	return 0;
 
-};
+}
 
-gpointer gui_timer_callback(gpointer data)
+gboolean gui_timer_callback(gpointer data)
 {
   struct phx_conn_data *conndata;
 	conndata = (struct phx_conn_data*)g_async_queue_try_pop(to_gui);
-	if (!conndata) return 1;
-	g_printf("Data got:%s\n",conndata->proc_name);
+	if (!conndata) return (gboolean)1;
+	g_print("Data got:%s\n",conndata->proc_name->str);
 	GtkMessageDialog* dialog;
 	dialog = gtk_message_dialog_new(NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
 										"A program %s wants to reach internet\n :%d -> :%d",conndata->proc_name->str,conndata->sport,conndata->dport);
 	gint resp = gtk_dialog_run(GTK_DIALOG(dialog));
-	gtk_widget_destroy(dialog);	
+	gtk_widget_destroy((GtkWidget*)dialog);	
  	if (resp == GTK_RESPONSE_YES)
 	{
 		conndata->state = ACCEPTED;
@@ -166,7 +171,7 @@ gpointer gui_timer_callback(gpointer data)
 		conndata->state = DENIED;
 	}
 	g_async_queue_push(to_daemon,conndata);
-  return 1;
+  return (gboolean)1;
 }
 
 GThread* gui_th;
@@ -198,4 +203,4 @@ int main(int argc, char** argv)
 	g_async_queue_unref(to_daemon);
 	printf("Finished\n");
 	exit(0);
-};
+}

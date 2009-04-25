@@ -1,3 +1,5 @@
+#ifndef _PHx_CALLBACK_H
+#define _PHX_CALLBACK_H
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -13,8 +15,7 @@
 #include "misc.h"
 #include "sockproc.h"
 #include "types.h"
-#include "data.h"
 int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 int out_pending_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
-
+#endif

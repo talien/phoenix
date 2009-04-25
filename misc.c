@@ -17,7 +17,7 @@ void write_ip(unsigned char* buffer)
 void swrite_ip(unsigned char* buffer,char* out, int buflen)
 {
 		sprintf(out,"%d.%d.%d.%d",buffer[0],buffer[1],buffer[2],buffer[3]);
-};
+}
 
 int get_val_from_hex(char hex)
 {
@@ -30,7 +30,7 @@ int get_val_from_hex(char hex)
     return (int)hex - 55;
   }
   return -1;
-};
+}
 
 
 void dumphex(unsigned char* buffer, int len)
@@ -39,10 +39,10 @@ void dumphex(unsigned char* buffer, int len)
    printf("0: ");
    while  (k < len)
    {
-      //printf("i:%d ",i);
+      /*printf("i:%d ",i);*/
       printf("%c",hex[buffer[k]/16] );
       printf("%c ",hex[buffer[k]%16] );
-      //printf("n:%d ",buf[i]);
+      /*printf("n:%d ",buf[i]);*/
       k++;
       if ( (k  %  4) == 0)
       {

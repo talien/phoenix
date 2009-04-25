@@ -1,8 +1,11 @@
 #include "callback.h"
+#include "data.h"
 
-int my_compare_func(GString *A,GString *B)
+GList *app_list = NULL, *deny_list = NULL, *pending_list = NULL;
+
+gint my_compare_func(gconstpointer A,gconstpointer B)
 {
-  return (g_string_equal(A,B))?0:1;
+  return (g_string_equal((GString*)A,(GString*)B))?0:1;
 }
 
 int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
@@ -10,14 +13,14 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	int id = 0;
 	int plen = 0, extr_res = 0;
 	struct nfqnl_msg_packet_hdr *ph;
-	char* payload;
+	unsigned char* payload;
 	char srcip[20];
 	char destip[20];
   struct phx_conn_data *conndata, *resdata = NULL;
 	printf("==Outbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, &payload);
+	plen = nfq_get_payload(nfad, (char**)&payload);
 	printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
   extr_res = phx_data_extract(payload,conndata,OUTBOUND);
@@ -67,20 +70,20 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
   printf("Data pushed to queue\n");
   pending_conn_count++;
 	return nfq_set_verdict_mark(out_qhandle,id,NF_REPEAT,htonl(0x2),plen,payload);
-};
+}
 
 int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
 {
 	struct nfqnl_msg_packet_hdr *ph;
-	char* payload;
-	unsigned int id = 0, plen = 0, headlen, dport, sport;
+	unsigned char* payload;
+	unsigned int id = 0, plen = 0;
 	int res;
-	char name[100], srcip[20], destip[20];
+	char srcip[20], destip[20];
 	struct phx_conn_data* conndata;
   printf("==Inbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, &payload);
+	plen = nfq_get_payload(nfad, (char**)&payload);
   conndata = g_new0(struct phx_conn_data,1);
 	res = phx_data_extract(payload,conndata,INBOUND);
 	swrite_ip(payload + 12,srcip,0);
@@ -96,20 +99,20 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 		printf("Nothing listens on port %d, dropping\n",conndata->dport);
 	 	return nfq_set_verdict(in_qhandle,id,NF_DROP,plen,payload);	
 	}
-};
+}
 
 int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_data *nfad, void* data)
 {
   int id = 0, plen = 0, extr_res = 0;
   struct nfqnl_msg_packet_hdr *ph;
-	char* payload;
+	unsigned char* payload;
 	char srcip[20];
 	char destip[20];
-  struct phx_conn_data *conndata, *resdata = NULL;
+  struct phx_conn_data *conndata;
   printf("==Out pending callback called==\n");
   ph = nfq_get_msg_packet_hdr(nfad);
   id = ntohl(ph->packet_id);
-  plen = nfq_get_payload(nfad, &payload);
+  plen = nfq_get_payload(nfad, (char**) &payload);
   printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
   extr_res = phx_data_extract(payload,conndata,OUTBOUND);
@@ -118,12 +121,8 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
      printf("Connection timeouted, dropping packet\n");
      return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);	
 	}
-  //dumphex(payload,plen);
-//  printf("Header len:%u bytes\n", headlen);
   write_ip(payload + 12); printf(":%d\n",conndata->sport);
-//  printf(":%u ->", sport);
   write_ip(payload + 16); printf(":%d\n",conndata->dport);
-//  printf(":%u\n", dport);
   swrite_ip(payload + 12,srcip,0);
   swrite_ip(payload + 16,destip,0);
 	if (g_list_find_custom(app_list,conndata->proc_name,my_compare_func) != NULL)
@@ -143,4 +142,4 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
 		return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
 	}
 	return nfq_set_verdict(out_pending_qhandle,id,NF_QUEUE,plen,payload);
-};
+}

@@ -11,9 +11,9 @@ struct phx_conn_data
 {
    GString* proc_name;
    guint pid;
-   guchar srcip[4];
+   gchar srcip[4];
    guint sport;
-   guchar destip[4];
+   gchar destip[4];
    guint dport;
 	 guint state;
 };
