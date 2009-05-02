@@ -3,6 +3,18 @@
 
 GList *app_list = NULL, *deny_list = NULL, *pending_list = NULL;
 
+int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int direction)
+{
+  unsigned int headlen;
+  headlen = (payload[0] % 16) * 4;
+  cdata->sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
+  cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
+  strncpy(cdata->destip,payload+16,4);
+  strncpy(cdata->srcip,payload+12,4);
+  return get_proc_from_conn(cdata,direction);
+}
+
+
 gint my_compare_func(gconstpointer A,gconstpointer B)
 {
   return (g_string_equal((GString*)A,(GString*)B))?0:1;

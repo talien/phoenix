@@ -17,22 +17,16 @@
 #include "sockproc.h"
 #include "types.h"
 #include "callback.h"
-#include "data.h"
 
+
+struct nfq_q_handle *in_qhandle, *out_qhandle,/* *in_pending_qhandle,*/ *out_pending_qhandle;
+GData *applist;
+GAsyncQueue *to_gui,*to_daemon;
+int gui_signal = 0;
+int pending_conn_count = 0;
 struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle;
 static int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
 char buf[2048];
-
-int phx_data_extract(char* payload, struct phx_conn_data *cdata, int direction)
-{
-  unsigned int headlen;
-	headlen = (payload[0] % 16) * 4;
-  cdata->sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
-	cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
-	strncpy((gchar*)cdata->destip,payload+16,4);
-	strncpy((gchar*)cdata->srcip,payload+12,4);
-	return get_proc_from_conn(cdata,direction);
-}
 
 void signal_quit(int signum)
 {
@@ -158,7 +152,7 @@ gboolean gui_timer_callback(gpointer data)
 	if (!conndata) return (gboolean)1;
 	g_print("Data got:%s\n",conndata->proc_name->str);
 	GtkMessageDialog* dialog;
-	dialog = gtk_message_dialog_new(NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
+	dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
 										"A program %s wants to reach internet\n :%d -> :%d",conndata->proc_name->str,conndata->sport,conndata->dport);
 	gint resp = gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy((GtkWidget*)dialog);	

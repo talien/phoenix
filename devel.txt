@@ -16,9 +16,22 @@ Got			->	Accept or Drop:
 
 TODO:
  - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!)
+  - hogyan: bejövő kapcsolatokat engedni programokra, bejövő lista
  - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni).
   - bejövő kapcsolatok tcp6-os problémáját megnézni!
+	- KÉSZ
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
+	- daemon-client modell után, client feladata
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
- - eventlog
+ - eventlog - vagy vmilyen logging modell.
  - daemon-client modell
+
+Koncepció:
+ - zona - program - instance
+   - zonat iptartomany,
+   - programot programnév, 
+   - instance-t programnév,pid páros
+  - azonosíto
+ - zona: az elején beállítani
+ - rule: zonához instance vagy program és direction
+ - 

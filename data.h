@@ -9,9 +9,9 @@
 
 #ifndef _PHX_DATA_H
 #define _PHX_DATA_H
-static struct nfq_q_handle *in_qhandle, *out_qhandle,/* *in_pending_qhandle,*/ *out_pending_qhandle;
-static GData *applist;
-static GAsyncQueue *to_gui,*to_daemon;
-static int gui_signal = 0;
-static int pending_conn_count = 0;
+extern struct nfq_q_handle *in_qhandle, *out_qhandle,/* *in_pending_qhandle,*/ *out_pending_qhandle;
+extern GData *applist;
+extern GAsyncQueue *to_gui,*to_daemon;
+extern int gui_signal;
+extern int pending_conn_count;
 #endif
