@@ -18,4 +18,13 @@ struct phx_conn_data
 	 guint state;
 };
 
+struct phx_app_rule
+{
+  GString* appname;
+  guint pid;
+  guint verdict;
+};
+
+
+
 #endif

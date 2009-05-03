@@ -34,4 +34,10 @@ Koncepció:
   - azonosíto
  - zona: az elején beállítani
  - rule: zonához instance vagy program és direction
- - 
+ - applist:
+  - struct apprule
+     - char* appname
+     - int pid
+     - int direction
+     - int verdict -> or verdict has direction? 
+  -  

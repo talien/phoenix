@@ -2,6 +2,12 @@
 #include "data.h"
 
 GList *app_list = NULL, *deny_list = NULL, *pending_list = NULL;
+GHashTable *apptable;
+
+void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
+{
+   
+};
 
 int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int direction)
 {

@@ -18,7 +18,6 @@
 #include "types.h"
 #include "callback.h"
 
-
 struct nfq_q_handle *in_qhandle, *out_qhandle,/* *in_pending_qhandle,*/ *out_pending_qhandle;
 GData *applist;
 GAsyncQueue *to_gui,*to_daemon;

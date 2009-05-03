@@ -218,10 +218,10 @@ int get_proc_from_conn(struct phx_conn_data* c,int direction)
 
 int get_pid_from_sock(int socknum)
 {
-	DIR *proc;
-	DIR *fd;
-	struct dirent *procent;
-	struct dirent *fdent;
+	DIR *proc = NULL;
+	DIR *fd = NULL;
+	struct dirent *procent = NULL;
+	struct dirent *fdent = NULL;
 	/*FIXME: I should choose the size of buffers carefully, to avoid buffer overflows */
 	char buf[100];
 	char buf2[100];
@@ -254,14 +254,18 @@ int get_pid_from_sock(int socknum)
 				strncpy(buf2,buf,100);
 				strcat(buf2,fdent->d_name);
 				llen = readlink(buf2,lname,sizeof(lname));
-				lname[llen-1] = '\0';
-				if (!strncmp("socket:",lname,7))
+				if ((int)llen > 0)
 				{
-					snum = atoi(lname+8);
-					if (snum == socknum)
+					//printf("%d\n",llen);
+					lname[llen-1] = '\0';
+					if (!strncmp("socket:",lname,7))
 					{
-						result = atoi(procent->d_name);
-						found = 1;
+						snum = atoi(lname+8);
+						if (snum == socknum)
+						{
+							result = atoi(procent->d_name);
+							found = 1;
+						}
 					}
 				}
 			}
