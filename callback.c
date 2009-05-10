@@ -1,13 +1,28 @@
 #include "callback.h"
 #include "data.h"
+#include "types.h"
 
-GList *app_list = NULL, *deny_list = NULL, *pending_list = NULL;
 GHashTable *apptable;
+
+void phx_apptable_init()
+{
+   apptable = g_hash_table_new(g_str_hash,g_str_equal);
+}
 
 void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
 {
-   
+   struct phx_app_rule *rule = g_new0(struct phx_app_rule,1);
+   rule->appname = g_string_new(cdata->proc_name->str);
+   rule->pid = cdata->pid;
+   rule->verdict = verdict;
+   guint hash = g_string_hash(rule->appname);
+   g_hash_table_insert(apptable,rule->appname->str,rule);
 };
+
+struct phx_app_rule* phx_apptable_lookup(GString* appname)
+{
+  return g_hash_table_lookup(apptable,appname->str);
+}
 
 int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int direction)
 {
@@ -51,39 +66,41 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	swrite_ip(payload + 16,destip,0);
   printf("%s:%d -> %s:%d\n",srcip,conndata->sport,destip,conndata->dport);
   resdata = g_async_queue_try_pop(to_daemon);
+  struct phx_app_rule* rule;
   if (resdata)
 	{
-		 pending_list = g_list_remove(pending_list,resdata->proc_name);
-		 if (resdata->state == ACCEPTED)
-		 {
-				app_list = g_list_prepend(app_list,resdata->proc_name);
-				g_free(resdata);
-		 }
-     else
-		 {
-				deny_list = g_list_prepend(deny_list,resdata->proc_name);
-				g_free(resdata);
+     rule = phx_apptable_lookup(resdata->proc_name);
+     if (rule)
+     {
+        g_printf("App found in hashtable!\n");
+        rule->verdict = resdata->state;
      }
+  }
+     g_free(resdata);
 		 gui_signal = 1;
 	}
-	if (g_list_find_custom(app_list,conndata->proc_name,my_compare_func) != NULL)
-	{
-		printf("Program %s found in list, accepting\n",conndata->proc_name->str);
-		g_string_free(conndata->proc_name,TRUE);
-		g_free(conndata);
-		return nfq_set_verdict(out_qhandle,id,NF_ACCEPT,plen,payload);
-	}
-	if (g_list_find_custom(deny_list,conndata->proc_name,my_compare_func) != NULL)
-	{
-		printf("Program %s found in list, denying\n",conndata->proc_name->str);
-		g_string_free(conndata->proc_name,TRUE);
-		g_free(conndata);
-		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
-	}
-	if (g_list_find_custom(pending_list,conndata->proc_name,my_compare_func) == NULL)
-	{
-		g_async_queue_push(to_gui,conndata);
-		pending_list = g_list_prepend(pending_list,conndata->proc_name);
+  rule = phx_apptable_lookup(conndata->proc_name);
+  if (rule)
+  {
+     if (rule->verdict == ACCEPTED)
+     {
+			  printf("Program %s found in list, accepting\n",conndata->proc_name->str);
+    		g_string_free(conndata->proc_name,TRUE);
+    		g_free(conndata);
+    		return nfq_set_verdict(out_qhandle,id,NF_ACCEPT,plen,payload);
+		 }
+     if (rule->verdict = DENIED)
+		 {
+				 printf("Program %s found in list, denying\n",conndata->proc_name->str);
+    		 g_string_free(conndata->proc_name,TRUE);
+    		 g_free(conndata);
+   			 return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
+		 }
+  }
+  else
+  {
+    g_async_queue_push(to_gui,conndata);
+    phx_apptable_insert(conndata,OUTBOUND,NEW);
   }
   printf("Data pushed to queue\n");
   pending_conn_count++;
@@ -143,21 +160,25 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
   write_ip(payload + 16); printf(":%d\n",conndata->dport);
   swrite_ip(payload + 12,srcip,0);
   swrite_ip(payload + 16,destip,0);
-	if (g_list_find_custom(app_list,conndata->proc_name,my_compare_func) != NULL)
-	{
-		printf("Program %s found in list, accepting\n",conndata->proc_name->str);
-		g_string_free(conndata->proc_name,TRUE);
-		g_free(conndata);
-	  pending_conn_count--;	
-		return nfq_set_verdict(out_pending_qhandle,id,NF_ACCEPT,plen,payload);
-	}
-	if (g_list_find_custom(deny_list,conndata->proc_name,my_compare_func) != NULL)
-	{
-		printf("Program %s found in list, denying\n",conndata->proc_name->str);
-		g_string_free(conndata->proc_name,TRUE);
-		g_free(conndata);
-    pending_conn_count--;
-		return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
-	}
+  struct phx_app_rule* rule = phx_apptable_lookup(conndata->proc_name);
+  if (rule)
+  {
+    if (rule->verdict == ACCEPTED)
+		{
+		 	printf("Program %s found in list, accepting\n",conndata->proc_name->str);
+    	g_string_free(conndata->proc_name,TRUE);
+    	g_free(conndata);
+    	pending_conn_count--;
+    	return nfq_set_verdict(out_pending_qhandle,id,NF_ACCEPT,plen,payload);	
+		}
+    if (rule->verdict == DENIED)
+    {
+			printf("Program %s found in list, denying\n",conndata->proc_name->str);
+    	g_string_free(conndata->proc_name,TRUE);
+    	g_free(conndata);
+    	pending_conn_count--;
+    	return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
+    }
+  }
 	return nfq_set_verdict(out_pending_qhandle,id,NF_QUEUE,plen,payload);
 }

@@ -130,6 +130,7 @@ void close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
 
 gpointer daemon_thread(gpointer data)
 {
+  phx_apptable_init();
 	g_async_queue_ref(to_gui);
 	g_async_queue_ref(to_daemon);	
 	while(1)
