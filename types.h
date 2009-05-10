@@ -16,6 +16,7 @@ struct phx_conn_data
    gchar destip[4];
    guint dport;
 	 guint state;
+   guint direction;
 };
 
 struct phx_app_rule

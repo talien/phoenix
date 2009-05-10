@@ -57,6 +57,7 @@ int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int di
   cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
   strncpy(cdata->destip,payload+16,4);
   strncpy(cdata->srcip,payload+12,4);
+  cdata->direction = direction;
   return get_proc_from_conn(cdata,direction);
 }
 
@@ -84,19 +85,7 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	swrite_ip(payload + 12,srcip,0);
 	swrite_ip(payload + 16,destip,0);
   printf("%s:%d -> %s:%d\n",srcip,conndata->sport,destip,conndata->dport);
-  resdata = g_async_queue_try_pop(to_daemon);
   struct phx_app_rule* rule;
-  if (resdata)
-	{
-     rule = phx_apptable_lookup(resdata->proc_name, resdata->pid, OUTBOUND);
-     if (rule)
-     {
-        g_printf("App found in hashtable!\n");
-        rule->verdict = resdata->state;
-     }
-     g_free(resdata);
-		 gui_signal = 1;
-	}
   rule = phx_apptable_lookup(conndata->proc_name,conndata->pid, OUTBOUND);
   if (rule)
   {
@@ -161,9 +150,11 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
     }
     else
     {
-       phx_apptable_insert(conndata,INBOUND,ACCEPTED);
+			phx_apptable_insert(conndata,INBOUND,NEW);
+			g_async_queue_push(to_gui,conndata);
     }
-		return nfq_set_verdict(in_qhandle,id,NF_ACCEPT,plen,payload);	
+    in_pending_count++;
+		return nfq_set_verdict_mark(in_qhandle,id,NF_REPEAT,htonl(0x1),plen,payload);	
 	}
 	else
 	{

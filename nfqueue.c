@@ -37,8 +37,16 @@ gboolean gui_timer_callback(gpointer data)
 	if (!conndata) return (gboolean)1;
 	g_print("Data got:%s\n",conndata->proc_name->str);
 	GtkMessageDialog* dialog;
-	dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
+  if (conndata->direction == OUTBOUND)
+  {
+	   dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
 										"A program %s wants to reach internet\n :%d -> :%d",conndata->proc_name->str,conndata->sport,conndata->dport);
+  }
+  else
+  {	
+    dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
+										"A program %s wants to accept connections from internet on port: %d \n",conndata->proc_name->str,conndata->sport,conndata->dport);
+  }
 	gint resp = gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy((GtkWidget*)dialog);	
  	if (resp == GTK_RESPONSE_YES)

@@ -9,6 +9,24 @@ struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle
 static int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
 char buf[2048];
 
+void process_gui_queue()
+{
+  struct phx_conn_data *resdata = g_async_queue_try_pop(to_daemon);
+  struct phx_app_rule* rule;
+  if (resdata)
+	{
+     printf("Processing gui queue\n");
+     rule = phx_apptable_lookup(resdata->proc_name, resdata->pid, resdata->direction);
+     if (rule)
+     {
+        g_printf("App found in hashtable!\n");
+        rule->verdict = resdata->state;
+     }
+     g_free(resdata);
+		 gui_signal = 1;
+	}
+}
+
 struct pollfd polls[4];
 struct timespec ival;
 gint timer_callback(gpointer data)
@@ -26,6 +44,7 @@ gint timer_callback(gpointer data)
 	ret = poll(polls,4,20);
 	if (ret > 0)
 	{
+    process_gui_queue();
 		if ( (polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI) )
 		{
 			while ((rv = recv(out_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)

@@ -245,9 +245,9 @@ int get_pid_from_sock(int socknum)
 			strcat(buf,"/fd/");
 			if ((fd = opendir(buf)) == NULL)
 			{
-				perror("Error opening fd directory");
-				closedir(proc);
-				exit(1);
+				perror("Error opening fd directory, maybe the process exited during operation");
+				//closedir(proc);
+				continue;
 			}
 			while ( (fdent = readdir(fd)) && !found )
 			{
