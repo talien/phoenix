@@ -15,13 +15,39 @@ void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
    rule->appname = g_string_new(cdata->proc_name->str);
    rule->pid = cdata->pid;
    rule->verdict = verdict;
-   guint hash = g_string_hash(rule->appname);
-   g_hash_table_insert(apptable,rule->appname->str,rule);
+   //guint hash = rule->pid * 4 + direction;
+   guint *hash = g_new0(guint,1);
+   *hash = 0 * 4 + direction;
+   GHashTable* chain = g_hash_table_lookup(apptable, cdata->proc_name->str);
+   if (!chain)
+   {
+      chain = g_hash_table_new(g_int_hash,g_int_equal);
+      g_hash_table_insert(chain,hash,rule);
+      g_hash_table_insert(apptable,rule->appname->str,chain);
+   }
+   else
+   {
+		  g_hash_table_insert(chain,hash,rule);
+   }
 };
 
-struct phx_app_rule* phx_apptable_lookup(GString* appname)
+struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direction)
 {
-  return g_hash_table_lookup(apptable,appname->str);
+  //return g_hash_table_lookup(apptable,appname->str);
+  GHashTable* chain = g_hash_table_lookup(apptable,appname->str);
+  if (!chain)
+  {
+    return NULL;
+  }
+  guint hash = 0 * 4 + direction;
+  struct phx_app_rule *rule = g_hash_table_lookup(chain,&hash);
+  if (rule)
+  {
+    return rule;
+  }
+  hash = pid * 4 + direction;
+  rule = g_hash_table_lookup(chain,&hash);
+  return rule;
 }
 
 int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int direction)
@@ -69,17 +95,16 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
   struct phx_app_rule* rule;
   if (resdata)
 	{
-     rule = phx_apptable_lookup(resdata->proc_name);
+     rule = phx_apptable_lookup(resdata->proc_name, resdata->pid, OUTBOUND);
      if (rule)
      {
         g_printf("App found in hashtable!\n");
         rule->verdict = resdata->state;
      }
-  }
      g_free(resdata);
 		 gui_signal = 1;
 	}
-  rule = phx_apptable_lookup(conndata->proc_name);
+  rule = phx_apptable_lookup(conndata->proc_name,conndata->pid, OUTBOUND);
   if (rule)
   {
      if (rule->verdict == ACCEPTED)
@@ -160,7 +185,7 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
   write_ip(payload + 16); printf(":%d\n",conndata->dport);
   swrite_ip(payload + 12,srcip,0);
   swrite_ip(payload + 16,destip,0);
-  struct phx_app_rule* rule = phx_apptable_lookup(conndata->proc_name);
+  struct phx_app_rule* rule = phx_apptable_lookup(conndata->proc_name,conndata->pid,OUTBOUND);
   if (rule)
   {
     if (rule->verdict == ACCEPTED)

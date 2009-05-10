@@ -17,7 +17,7 @@ Got			->	Accept or Drop:
 TODO:
  - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!)
   - hogyan: bejövő kapcsolatokat engedni programokra, bejövő lista
- - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni).
+ - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni). KÉSZ
   - bejövő kapcsolatok tcp6-os problémáját megnézni!
 	- KÉSZ
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
@@ -25,6 +25,9 @@ TODO:
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell
+ - zónázás
+ - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik
+   a /proc-ban, akkor törölni.
 
 Koncepció:
  - zona - program - instance

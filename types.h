@@ -23,6 +23,7 @@ struct phx_app_rule
   GString* appname;
   guint pid;
   guint verdict;
+  guint direction;
 };
 
 
