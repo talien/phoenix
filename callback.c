@@ -77,7 +77,7 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	unsigned char* payload;
 	char srcip[20];
 	char destip[20];
-  struct phx_conn_data *conndata, *resdata = NULL;
+  struct phx_conn_data *conndata = NULL, *resdata = NULL;
 	printf("==Outbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
 	id = ntohl(ph->packet_id);

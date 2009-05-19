@@ -57,7 +57,6 @@ struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
             exit(1);
         }
   int recvd;
-  g_free(data);
   if ( (recvd = recv(s,phx_buf,sizeof(phx_buf),0)) == -1)
   {
      perror("Error receiving from GUI IPC socket\n");
