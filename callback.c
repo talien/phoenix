@@ -3,10 +3,12 @@
 #include "types.h"
 
 GHashTable *apptable;
+GMutex* apptable_lock;
 
 void phx_apptable_init()
 {
    apptable = g_hash_table_new(g_str_hash,g_str_equal);
+   apptable_lock = g_mutex_new();
 }
 
 void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
@@ -18,6 +20,7 @@ void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
    //guint hash = rule->pid * 4 + direction;
    guint *hash = g_new0(guint,1);
    *hash = 0 * 4 + direction;
+   g_mutex_lock(apptable_lock);
    GHashTable* chain = g_hash_table_lookup(apptable, cdata->proc_name->str);
    if (!chain)
    {
@@ -29,23 +32,28 @@ void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
    {
 		  g_hash_table_insert(chain,hash,rule);
    }
+   g_mutex_unlock(apptable_lock);
 };
 
 struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direction)
 {
+  g_mutex_lock(apptable_lock);
   GHashTable* chain = g_hash_table_lookup(apptable,appname->str);
   if (!chain)
   {
+    g_mutex_unlock(apptable_lock);
     return NULL;
   }
   guint hash = 0 * 4 + direction;
   struct phx_app_rule *rule = g_hash_table_lookup(chain,&hash);
   if (rule)
   {
+    g_mutex_unlock(apptable_lock);
     return rule;
   }
   hash = pid * 4 + direction;
   rule = g_hash_table_lookup(chain,&hash);
+  g_mutex_unlock(apptable_lock);
   return rule;
 }
 
@@ -106,8 +114,8 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
   }
   else
   {
-    g_async_queue_push(to_gui,conndata);
     phx_apptable_insert(conndata,OUTBOUND,NEW);
+    g_async_queue_push(to_gui,conndata);
   }
   printf("Data pushed to queue\n");
   pending_conn_count++;

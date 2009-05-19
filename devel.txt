@@ -15,19 +15,22 @@ Gui			<-	callback
 Got			->	Accept or Drop:
 
 TODO:
- - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!)
-  - hogyan: bejövő kapcsolatokat engedni programokra, bejövő lista
+ - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!) KÉSZ
+  - hogyan: bejövő kapcsolatokat engedni programokra, bejövő lista  KÉSZ
  - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni). KÉSZ
-  - bejövő kapcsolatok tcp6-os problémáját megnézni!
-	- KÉSZ
+  - bejövő kapcsolatok tcp6-os problémáját megnézni! KÉSZ
+ - Vuze tesztelés, tcp6 connection timeoutok megnézése jobban
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
 	- daemon-client modell után, client feladata
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell
  - zónázás
+ - performancia javítás
  - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik
    a /proc-ban, akkor törölni.
+ - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás?
+ - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
 
 Koncepció:
  - zona - program - instance
@@ -42,5 +45,4 @@ Koncepció:
      - char* appname
      - int pid
      - int direction
-     - int verdict -> or verdict has direction? 
-  -  
+     - int verdict -> or verdict has direction?  

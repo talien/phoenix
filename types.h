@@ -10,21 +10,21 @@
 struct phx_conn_data
 {
    GString* proc_name;
-   guint pid;
+   guint32 pid;
    gchar srcip[4];
-   guint sport;
+   guint32 sport;
    gchar destip[4];
-   guint dport;
-	 guint state;
-   guint direction;
+   guint32 dport;
+	 guint32 state;
+   guint32 direction;
 };
 
 struct phx_app_rule
 {
   GString* appname;
-  guint pid;
-  guint verdict;
-  guint direction;
+  guint32 pid;
+  guint32 verdict;
+  guint32 direction;
 };
 
 

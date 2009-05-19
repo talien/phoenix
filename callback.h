@@ -20,4 +20,6 @@ int in_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *
 int out_pending_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 int in_pending_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 void phx_apptable_init();
+struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direction);
+
 #endif

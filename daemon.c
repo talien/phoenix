@@ -1,13 +1,85 @@
-#include "daemon.h"
+#include <sys/un.h>
+#include "serialize.h"
+#include <libnetfilter_queue/libnetfilter_queue.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <asm/types.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <netinet/in.h>
+#include <linux/netfilter.h>
+#include <time.h>
+#include <sys/poll.h>
+#include <sys/un.h>
+#include <signal.h>
+
+#include <glib.h>
+
+#include "misc.h"
+#include "sockproc.h"
+#include "types.h"
+#include "callback.h"
+#include "serialize.h"
+
 
 struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
 //GData *applist;
-extern GAsyncQueue *to_gui,*to_daemon;
+GAsyncQueue *to_gui,*to_daemon;
 int gui_signal = 0;
 int pending_conn_count = 0, in_pending_count = 0;
 struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle;
 static int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
 char buf[2048];
+char phx_buf[2048];
+GThread* gui_thread;
+
+struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
+{
+	int dlen = phx_serialize_data(data,phx_buf);
+	int s, t, len;
+	struct sockaddr_un remote;
+	char str[100];
+	if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+		exit(1);
+	}
+	printf("Connecting to GUI socket\n");
+	remote.sun_family = AF_UNIX;
+	strcpy(remote.sun_path, "sock-client");
+	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+	if (connect(s, (struct sockaddr *)&remote, len) == -1) {
+     printf("Connection failed to client socket!\n");
+     struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
+     conndata->state = DENIED;
+     return conndata;
+  }
+  if (send(s, phx_buf, dlen, 0) == -1) {
+            perror("send");
+            exit(1);
+        }
+  int recvd;
+  g_free(data);
+  if ( (recvd = recv(s,phx_buf,sizeof(phx_buf),0)) == -1)
+  {
+     perror("Error receiving from GUI IPC socket\n");
+  } 
+  printf("Got data from GUI on IPC, len:%d\n",recvd);
+  struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,recvd);
+  close(s);
+  return conndata;
+}
+
+gpointer gui_ipc(gpointer data)
+{
+  g_async_queue_ref(to_daemon);
+  g_async_queue_ref(to_gui);
+  while(1)
+  {
+     struct phx_conn_data* data = g_async_queue_pop(to_gui);
+     struct phx_conn_data* newdata = send_conn_data(data);
+     g_free(data);
+     g_async_queue_push(to_daemon,newdata);
+  }   
+}
 
 void process_gui_queue()
 {
@@ -16,6 +88,11 @@ void process_gui_queue()
   if (resdata)
 	{
      printf("Processing gui queue\n");
+     if ( resdata->proc_name == 0)
+     {
+       printf("Found NULL process name, something went wrong\n");
+       return;
+     }
      rule = phx_apptable_lookup(resdata->proc_name, resdata->pid, resdata->direction);
      if (rule)
      {
@@ -91,6 +168,7 @@ gint timer_callback(gpointer data)
         }
       }
      }
+			
 
    }
 	return 1;
@@ -140,16 +218,20 @@ void close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
   nfq_close(handle);  
 }
 
-gpointer daemon_thread(gpointer data)
+int end = 0;
+
+int main(int argc,char** argv)
 {
   printf("Opening netlink connections\n");
  	init_queue(&in_handle,&in_qhandle,&in_fd,in_queue_cb,1);
 	init_queue(&out_handle,&out_qhandle,&out_fd,out_queue_cb,0);
   init_queue(&out_pending_handle,&out_pending_qhandle,&out_pending_fd,out_pending_cb,3);
   init_queue(&in_pending_handle,&in_pending_qhandle,&in_pending_fd,in_pending_cb,2);
+  g_thread_init(NULL);
+  to_gui = g_async_queue_new();
+  to_daemon = g_async_queue_new();
+  gui_thread = g_thread_create(gui_ipc,NULL,1,NULL);
   phx_apptable_init();
-	g_async_queue_ref(to_gui);
-	g_async_queue_ref(to_daemon);	
 	while(!end)
 	{
     timer_callback(NULL);
