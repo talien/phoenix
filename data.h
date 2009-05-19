@@ -11,7 +11,6 @@
 #define _PHX_DATA_H
 extern struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
 extern GAsyncQueue *to_gui,*to_daemon;
-extern int gui_signal;
 extern int pending_conn_count;
 extern int in_pending_count;
 #endif

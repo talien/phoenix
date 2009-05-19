@@ -25,13 +25,14 @@
 struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
 //GData *applist;
 GAsyncQueue *to_gui,*to_daemon;
-int gui_signal = 0;
 int pending_conn_count = 0, in_pending_count = 0;
 struct nfq_handle *in_handle, *out_handle,*in_pending_handle,*out_pending_handle;
 static int out_fd,in_fd,in_pending_fd,out_pending_fd,rv;
 char buf[2048];
 char phx_buf[2048];
-GThread* gui_thread;
+GThread *gui_thread, *pending_thread;
+GCond* pending_cond;
+GMutex* cond_mutex;
 
 struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
 {
@@ -77,6 +78,7 @@ gpointer gui_ipc(gpointer data)
      struct phx_conn_data* newdata = send_conn_data(data);
      g_free(data);
      g_async_queue_push(to_daemon,newdata);
+     process_gui_queue();
   }   
 }
 
@@ -99,7 +101,7 @@ void process_gui_queue()
         rule->verdict = resdata->state;
      }
      g_free(resdata);
-		 gui_signal = 1;
+		 signal_pending();
 	}
 }
 
@@ -113,14 +115,9 @@ gint timer_callback(gpointer data)
 	polls[0].events = POLLIN | POLLPRI;
 	polls[1].fd = in_fd;
 	polls[1].events = POLLIN | POLLPRI;
-  polls[2].fd = out_pending_fd;
-  polls[2].events = POLLIN | POLLPRI;
-  polls[3].fd = in_pending_fd;
-  polls[3].events = POLLIN | POLLPRI;
-	ret = poll(polls,4,20);
+	ret = poll(polls,2,-1);
 	if (ret > 0)
 	{
-    process_gui_queue();
 		if ( (polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI) )
 		{
 			while ((rv = recv(out_fd,buf,sizeof(buf),MSG_DONTWAIT)) && rv > 0)
@@ -139,38 +136,60 @@ gint timer_callback(gpointer data)
 				printf("Packet handled\n");
   		}
 		}
-		if ( ((polls[2].revents & POLLIN) || (polls[2].revents & POLLPRI) ) && (gui_signal == 1) )
-		{
-      gui_signal = 0;
-			for (i = 0; i < pending_conn_count; i++)
-  		{
-				rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
-				if (rv > 0)
-				{
-    			printf("Packet received\n");
-    			nfq_handle_packet(out_pending_handle,buf,rv);
-					printf("Packet handled\n");
-				}
-  		}
-		 }
-    if ( ((polls[3].revents & POLLIN) || (polls[3].revents & POLLPRI) ) && (gui_signal == 1) )
-    {
-      gui_signal = 0;
-      for (i = 0; i < in_pending_count; i++)
-      {
-        rv = recv(in_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
-        if (rv > 0)
-        {
-          printf("Packet received\n");
-          nfq_handle_packet(in_pending_handle,buf,rv);
-          printf("Packet handled\n");
-        }
-      }
-     }
-			
 
    }
 	return 1;
+}
+
+void signal_pending()
+{
+   g_cond_signal(pending_cond);
+}
+
+gpointer pending_thread_run(gpointer data)
+{
+   cond_mutex = g_mutex_new();
+   pending_cond = g_cond_new();
+   while(1)
+   {
+      g_cond_wait(pending_cond,cond_mutex);
+      int i;
+			int ret;
+  		polls[0].fd = out_pending_fd;
+			polls[0].events = POLLIN | POLLPRI;
+			polls[1].fd = in_pending_fd;
+			polls[1].events = POLLIN | POLLPRI;
+			ret = poll(polls,2,0);
+			if (ret > 0)
+			{
+				if ( ((polls[2].revents & POLLIN) || (polls[2].revents & POLLPRI) ) )
+				{
+					for (i = 0; i < pending_conn_count; i++)
+		  		{
+						rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
+						if (rv > 0)
+						{
+		    			printf("Packet received\n");
+		    			nfq_handle_packet(out_pending_handle,buf,rv);
+							printf("Packet handled\n");
+						}
+		  		}
+				 }
+		    if ( ((polls[3].revents & POLLIN) || (polls[3].revents & POLLPRI) ) )
+		    {
+		      for (i = 0; i < in_pending_count; i++)
+		      {
+		        rv = recv(in_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
+		        if (rv > 0)
+		        {
+		          printf("Packet received\n");
+		          nfq_handle_packet(in_pending_handle,buf,rv);
+		          printf("Packet handled\n");
+		        }
+		      }
+		    }
+   		}
+   }
 }
 
 void init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd,nfq_callback *cb,int queue_num)
@@ -227,9 +246,11 @@ int main(int argc,char** argv)
   init_queue(&out_pending_handle,&out_pending_qhandle,&out_pending_fd,out_pending_cb,3);
   init_queue(&in_pending_handle,&in_pending_qhandle,&in_pending_fd,in_pending_cb,2);
   g_thread_init(NULL);
+  pending_cond = g_cond_new();
   to_gui = g_async_queue_new();
   to_daemon = g_async_queue_new();
   gui_thread = g_thread_create(gui_ipc,NULL,1,NULL);
+  pending_thread = g_thread_create(pending_thread_run,NULL,1,NULL);
   phx_apptable_init();
 	while(!end)
 	{
