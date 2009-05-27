@@ -1,7 +1,9 @@
 #ifndef _PHX_MISC_H
 #define _PHX_MISC_H
 #include <stdio.h>
-
+#include <glib.h>
+#include <unistd.h>
+#include <pwd.h>
 
 static char hex[16]={'0','1','2','3','4','5','6','7',
                  '8','9','A','B','C','D','E','F' };
@@ -70,5 +72,19 @@ void dumpascii(unsigned char* buffer,int len)
        k++;
     }
     printf("\n");
+}
+
+GString* get_user(guint32 pid)
+{
+  char buf[1024];
+  sprintf(buf,"/proc/%d/status",pid);
+  FILE* statf = fopen(buf,"r");
+  int i = 0;
+  while ( i < 7) { fgets(buf,sizeof(buf),statf); i++; }
+  int uid;
+  sscanf(buf,"%*s %d %*d %*d %*d",&uid);
+//  printf("uid: %d\n",uid);
+  struct passwd* pass = getpwuid(uid);
+  return g_string_new(pass->pw_name);
 }
 #endif

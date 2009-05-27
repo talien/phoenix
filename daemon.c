@@ -45,10 +45,12 @@ struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
 	}
 	printf("Connecting to GUI socket\n");
 	remote.sun_family = AF_UNIX;
-	strcpy(remote.sun_path, "sock-client");
+  GString* uname = get_user(data->pid);
+  uname = g_string_prepend(uname,"phxsock-");
+	strcpy(remote.sun_path, uname->str);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1) {
-     printf("Connection failed to client socket!\n");
+     printf("Connection failed to client socket:%s!\n",uname->str);
      struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
      conndata->state = DENIED;
      return conndata;

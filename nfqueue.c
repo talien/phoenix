@@ -10,6 +10,7 @@
 #include <sys/poll.h>
 #include <sys/un.h>
 #include <signal.h>
+#include <pwd.h>
 
 #include <gtk/gtk.h>
 #include <glib.h>
@@ -33,19 +34,36 @@ void signal_quit(int signum)
 
 int end = 0;
 
+/*GString* get_user(guint32 pid)
+{
+  char buf[1024];
+  sprintf(buf,"/proc/%d/status",pid);
+  FILE* statf = fopen(buf,"r");
+  int i = 0;
+  while ( i < 7) { fgets(buf,sizeof(buf),statf); i++; }
+  int uid;
+  sscanf(buf,"%*s %d %*d %*d %*d",&uid);
+//  printf("uid: %d\n",uid);
+  struct passwd* pass = getpwuid(uid);
+  return g_string_new(pass->pw_name);
+}*/
+
 void setup_socket()
 {
+  GString* uname = get_user(getpid());
+  printf("Username : %s\n",uname->str);
+  uname = g_string_prepend(uname,"phxsock-");
   ipc_socket = socket(AF_UNIX,SOCK_STREAM,0);
   local.sun_family = AF_UNIX;
-  strcpy(local.sun_path,"sock-client");
+  strcpy(local.sun_path,uname->str);
   unlink(local.sun_path);
   len = strlen(local.sun_path) + sizeof(local.sun_family);
   if (bind(ipc_socket, (struct sockaddr *)&local, len) == -1) {
-       perror("bind");
+       perror("Error on binding IPC socket");
        exit(1);
   }
   if (listen(ipc_socket, 5) == -1) {
-       perror("listen");
+       perror("Error on listening IPC socket");
        exit(1);
   }
 }
@@ -79,7 +97,7 @@ gboolean gui_timer_callback(gpointer data)
   else
   {	
     dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
-										"A program %s wants to accept connections from internet on port: %d \n",conndata->proc_name->str,conndata->sport,conndata->dport);
+										"A program %s wants to accept connections from internet on port: %d \n",conndata->proc_name->str,conndata->dport);
   }
 	gint resp = gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy((GtkWidget*)dialog);	

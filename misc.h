@@ -7,4 +7,5 @@ void swrite_ip(unsigned char* buffer,char* out, int buflen);
 int get_val_from_hex(char hex);
 void dumphex(unsigned char* buffer, int len);
 void dumpascii(unsigned char* buffer,int len);
+GString* get_user(guint32 pid);
 #endif

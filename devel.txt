@@ -24,9 +24,10 @@ TODO:
 	- daemon-client modell után, client feladata
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
  - eventlog - vagy vmilyen logging modell.
- - daemon-client modell
+ - daemon-client modell KÉSZ
  - zónázás
- - performancia javítás
+ - performancia javítás részletesen KÉSZ
+  - tesztelés: connection burst
  - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik
    a /proc-ban, akkor törölni.
  - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás?
@@ -46,3 +47,6 @@ Koncepció:
      - int pid
      - int direction
      - int verdict -> or verdict has direction?  
+ - zona->zone_id
+  - verdictek: ACCEPT,ACCEPT_INST,ACCEPT_CONN,DENIED,DENIED_INST,DENIED_CONN
+
