@@ -75,8 +75,8 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	int plen = 0, extr_res = 0;
 	struct nfqnl_msg_packet_hdr *ph;
 	unsigned char* payload;
-	char srcip[20];
-	char destip[20];
+	GString* srcip;
+	GString* destip;
   struct phx_conn_data *conndata = NULL, *resdata = NULL;
 	printf("==Outbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
@@ -90,9 +90,14 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
     printf("Connection timeouted, dropping packet\n");
 		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);	
 	} 
-	swrite_ip(payload + 12,srcip,0);
-	swrite_ip(payload + 16,destip,0);
-  printf("%s:%d -> %s:%d\n",srcip,conndata->sport,destip,conndata->dport);
+	//swrite_ip(payload + 12,srcip,0);
+  srcip = phx_dns_lookup(payload + 12);
+	destip = phx_dns_lookup(payload + 16);
+  if (destip == NULL)
+   destip = phx_write_ip(payload + 16);
+  printf("%s:%d -> %s:%d\n",srcip->str,conndata->sport,destip->str,conndata->dport);
+  g_string_free(srcip,TRUE);
+  g_string_free(destip,TRUE);
   struct phx_app_rule* rule;
   rule = phx_apptable_lookup(conndata->proc_name,conndata->pid, OUTBOUND);
   if (rule)
@@ -110,6 +115,20 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
     		 g_string_free(conndata->proc_name,TRUE);
     		 g_free(conndata);
    			 return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
+		 }
+		 if (rule->verdict == ASK)
+		 {
+ 				 printf("Program %s found in list, asking again\n",conndata->proc_name->str);
+				 g_async_queue_push(to_gui,conndata);
+		 }
+     if (rule->verdict == DENY_CONN)	
+     {
+		 	 printf("Program %s found in list, denying for this time\n",conndata->proc_name->str);
+    	 g_string_free(conndata->proc_name,TRUE);
+    	 g_free(conndata);
+    	 pending_conn_count--;
+       rule->verdict = ASK;
+    	 return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);
 		 }
   }
   else
@@ -214,6 +233,15 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
     	pending_conn_count--;
     	return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
     }
+    if (rule->verdict == DENY_CONN)	
+    {
+		 	printf("Program %s found in list, denying for this time\n",conndata->proc_name->str);
+    	g_string_free(conndata->proc_name,TRUE);
+    	g_free(conndata);
+    	pending_conn_count--;
+      rule->verdict = ASK;
+    	return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);
+		}
   }
 	return nfq_set_verdict(out_pending_qhandle,id,NF_QUEUE,plen,payload);
 }

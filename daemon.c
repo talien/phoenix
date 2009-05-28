@@ -52,7 +52,7 @@ struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
 	if (connect(s, (struct sockaddr *)&remote, len) == -1) {
      printf("Connection failed to client socket:%s!\n",uname->str);
      struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
-     conndata->state = DENIED;
+     conndata->state = DENY_CONN;
      return conndata;
   }
   if (send(s, phx_buf, dlen, 0) == -1) {

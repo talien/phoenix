@@ -4,6 +4,8 @@
 #include <glib.h>
 #include <unistd.h>
 #include <pwd.h>
+#include <netdb.h>
+
 
 static char hex[16]={'0','1','2','3','4','5','6','7',
                  '8','9','A','B','C','D','E','F' };
@@ -19,6 +21,14 @@ void write_ip(unsigned char* buffer)
 void swrite_ip(unsigned char* buffer,char* out, int buflen)
 {
 		sprintf(out,"%d.%d.%d.%d",buffer[0],buffer[1],buffer[2],buffer[3]);
+}
+
+GString* phx_write_ip(char ip[4])
+{
+   char ipbuf[20];
+   memset(ipbuf, sizeof(ipbuf),0);
+   swrite_ip(ip,ipbuf,0);
+   return g_string_new(ipbuf);
 }
 
 int get_val_from_hex(char hex)
@@ -87,4 +97,22 @@ GString* get_user(guint32 pid)
   struct passwd* pass = getpwuid(uid);
   return g_string_new(pass->pw_name);
 }
+
+GString* phx_dns_lookup(char ip[4])
+{
+		GString* destip = phx_write_ip(ip);
+		struct sockaddr_in sa; /* input */
+		sa.sin_family = AF_INET;
+		sa.sin_port = htons(3490);
+		inet_pton(AF_INET, destip->str, &sa.sin_addr);
+
+		char hbuf[1024];
+    g_string_free(destip,TRUE);
+		if (getnameinfo(&sa, sizeof(struct sockaddr), hbuf, sizeof(hbuf),
+			NULL, 0, NI_NAMEREQD))
+			 return NULL;
+	  else
+		   return g_string_new(hbuf);
+}
+
 #endif

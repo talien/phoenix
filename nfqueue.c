@@ -11,6 +11,7 @@
 #include <sys/un.h>
 #include <signal.h>
 #include <pwd.h>
+#include <netdb.h>
 
 #include <gtk/gtk.h>
 #include <glib.h>
@@ -33,20 +34,6 @@ void signal_quit(int signum)
 }
 
 int end = 0;
-
-/*GString* get_user(guint32 pid)
-{
-  char buf[1024];
-  sprintf(buf,"/proc/%d/status",pid);
-  FILE* statf = fopen(buf,"r");
-  int i = 0;
-  while ( i < 7) { fgets(buf,sizeof(buf),statf); i++; }
-  int uid;
-  sscanf(buf,"%*s %d %*d %*d %*d",&uid);
-//  printf("uid: %d\n",uid);
-  struct passwd* pass = getpwuid(uid);
-  return g_string_new(pass->pw_name);
-}*/
 
 void setup_socket()
 {
@@ -91,8 +78,14 @@ gboolean gui_timer_callback(gpointer data)
 	GtkMessageDialog* dialog;
   if (conndata->direction == OUTBOUND)
   {
-	   dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
-										"A program %s wants to reach internet\n :%d -> :%d",conndata->proc_name->str,conndata->sport,conndata->dport);
+    GString* srcip = phx_write_ip(conndata->srcip);
+    GString* destip = phx_dns_lookup(conndata->destip);
+    if (destip == NULL)
+      destip = phx_write_ip(conndata->destip);
+		dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
+										"A program %s wants to reach internet\n %s:%d -> %s:%d",conndata->proc_name->str,srcip->str,conndata->sport,destip->str,conndata->dport);
+		g_string_free(srcip,TRUE);
+		g_string_free(destip,TRUE);
   }
   else
   {	
@@ -126,7 +119,7 @@ int main(int argc, char** argv)
 	signal(SIGTERM,signal_quit);
 	signal(SIGINT,signal_quit);
   setup_socket();
-	htimeout=g_timeout_add((guint32)5,gui_timer_callback, my_callback_data);
+	htimeout=g_timeout_add((guint32)10,gui_timer_callback, my_callback_data);
 	gtk_main();
 	g_source_remove(htimeout);
   end = 1;

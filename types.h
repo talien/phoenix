@@ -6,6 +6,11 @@
 #define NEW 0
 #define ACCEPTED 1
 #define DENIED 2
+#define DENY_CONN 3
+#define DENY_INST 4
+#define ACCEPT_CONN 5
+#define ACCEPT_INST 6
+#define ASK 7
 
 struct phx_conn_data
 {
