@@ -11,4 +11,6 @@ void dumpascii(unsigned char* buffer,int len);
 GString* get_user(guint32 pid);
 GString* phx_write_ip(char ip[4]);
 GString* phx_dns_lookup(char ip[4]);
+void log_debug(gchar* format, ...);
+
 #endif
