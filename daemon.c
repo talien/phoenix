@@ -21,7 +21,6 @@
 #include "callback.h"
 #include "serialize.h"
 
-
 struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
 //GData *applist;
 GAsyncQueue *to_gui,*to_daemon;
@@ -33,6 +32,137 @@ char phx_buf[2048];
 GThread *gui_thread, *pending_thread;
 GCond* pending_cond;
 GMutex* cond_mutex;
+int daemon_socket = 0;
+
+void parse_config()
+{
+  char fbuf[512], var1[128], var2[128];
+  struct phx_conn_data* rule = 0;
+  FILE* conffile = fopen("phx.conf","r");
+  int i,j,verdict,direction = OUTBOUND;
+  while (fgets(fbuf,sizeof(fbuf),conffile) > 0)
+	{
+    int invar1 = 0, invar2 = 0, wasvar1 = 0;
+		j = 0;
+		var2[0] = '\0';
+		for(i=0;fbuf[i] != '\0'; i++)
+		{
+			if (!isspace(fbuf[i]))
+			{
+				if ((!invar1) && (!invar2) && (!wasvar1) && (fbuf[i] != '[') )
+				{
+					invar1 = 1;
+					j = 0;
+				}
+				if ((!invar1) && (!invar2) && (wasvar1))
+				{
+					invar2 = 1;
+					j = 0;
+				}
+				if ((fbuf[i] == ']') || (fbuf[i] == '='))
+				{
+					invar1 = 0;
+					wasvar1 = 1;
+					var1[j] = '\0';
+				}
+				if (invar1)
+				{
+					var1[j] = fbuf[i];
+					j++;
+				}
+				if (invar2)
+				{
+					var2[j] = fbuf[i];
+					j++;
+				}
+				if (fbuf[i] == '[')
+				{
+					invar1 = 1;
+				}
+			}
+		}
+		if (invar2)
+		{
+			invar2 = 0;
+			var2[j] = '\0';
+		}
+		printf("Variable1: %s Variable2:%s\n",var1,var2);
+		if (!strncmp(var1,"rule",128))
+		{
+			if (rule)
+			{
+				 phx_apptable_insert(rule,direction,verdict);
+			}
+			rule = g_new0(struct phx_conn_data,1);
+		}
+		if (!strncmp(var1,"program",128))
+		{
+			rule->proc_name = g_string_new(var2);
+			rule->pid = 0;
+		}
+		if (!strncmp(var1,"verdict",128))
+		{
+			if (!strncmp(var2,"deny",128))
+			{
+				verdict = DENIED;
+			}
+			if (!strncmp(var2,"accept",128))
+			{
+				verdict = ACCEPTED;
+			}
+		}
+	}
+	if (rule)
+	{
+		printf("Inserting rule\n");
+		phx_apptable_insert(rule,direction,verdict);
+	}
+	close(conffile);
+}
+
+void init_daemon_socket()
+{
+  struct sockaddr_un local;
+  int len;
+  daemon_socket = socket(AF_UNIX,SOCK_STREAM,0);
+  strcpy(local.sun_path,"phxdsock");
+  len = strlen(local.sun_path) + sizeof(local.sun_family);
+  if (bind(daemon_socket, (struct sockaddr *)&local, len) == -1) {
+       perror("Error on binding daemon socket");
+       exit(1);
+  }
+  if (listen(daemon_socket, 5) == -1) {
+       perror("Error on listening daemon socket");
+       exit(1);
+  }
+
+}
+
+void perform_handshake(int sock)
+// GUI sends its uid to daemon, the the connection will be permanent until gui exists
+{
+   char buffer[1024];
+   int hs_len = recv(sock,buffer,1024,0);
+     
+};
+
+gpointer gui_conn_thread(gpointer data)
+// one (two?) thread per gui connection, should watch his on queue from daemon, and answers from gui asynchronous
+{
+   
+}
+
+gpointer daemon_socket_thread(gpointer data)
+{
+   int socklen = 0;
+   struct sockaddr_un remote;
+   int remote_sock, rsock_len;
+   while(1)
+   {
+      remote_sock = accept(daemon_socket, &remote, &rsock_len);
+      perform_handshake(remote_sock);
+   };
+}
 
 struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
 {
@@ -45,32 +175,39 @@ struct phx_conn_data* send_conn_data(struct phx_conn_data* data)
 	}
 	printf("Connecting to GUI socket\n");
 	remote.sun_family = AF_UNIX;
-  GString* uname = get_user(data->pid);
-  uname = g_string_prepend(uname,"phxsock-");
+	GString* uname = get_user(data->pid);
+	if (uname == NULL)
+	{
+    	printf("Cannot determine process user, assuming root\n");
+    	uname = g_string_new("root");
+	}
+	uname = g_string_prepend(uname,"phxsock-");
 	strcpy(remote.sun_path, uname->str);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1) {
-     printf("Connection failed to client socket:%s!\n",uname->str);
-     struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
-     conndata->state = DENY_CONN;
-     return conndata;
-  }
-  if (send(s, phx_buf, dlen, 0) == -1) {
-            perror("send");
-            exit(1);
-        }
-  int recvd;
-  if ( (recvd = recv(s,phx_buf,sizeof(phx_buf),0)) == -1)
-  {
-     perror("Error receiving from GUI IPC socket\n");
-  } 
-  printf("Got data from GUI on IPC, len:%d\n",recvd);
-  struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,recvd);
-  close(s);
-  return conndata;
+		printf("Connection failed to client socket:%s!\n",uname->str);
+		struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
+		conndata->state = DENY_CONN;
+		return conndata;
+	}
+	if (send(s, phx_buf, dlen, 0) == -1) {
+		perror("send");
+    struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,dlen);
+		conndata->state = DENY_CONN;
+		return conndata;
+    }
+	int recvd;
+	if ( (recvd = recv(s,phx_buf,sizeof(phx_buf),0)) == -1)
+	{
+		perror("Error receiving from GUI IPC socket\n");
+  	} 
+	printf("Got data from GUI on IPC, len:%d\n",recvd);
+	struct phx_conn_data *conndata = phx_deserialize_data(phx_buf,recvd);
+	close(s);
+	return conndata;
 }
 
-gpointer gui_ipc(gpointer data)
+gpointer gui_ipc_thread(gpointer data)
 {
   g_async_queue_ref(to_daemon);
   g_async_queue_ref(to_gui);
@@ -80,11 +217,11 @@ gpointer gui_ipc(gpointer data)
      struct phx_conn_data* newdata = send_conn_data(data);
      g_free(data);
      g_async_queue_push(to_daemon,newdata);
-     process_gui_queue();
+     while (process_gui_queue()) {};
   }   
 }
 
-void process_gui_queue()
+int process_gui_queue()
 {
   struct phx_conn_data *resdata = g_async_queue_try_pop(to_daemon);
   struct phx_app_rule* rule;
@@ -104,11 +241,17 @@ void process_gui_queue()
      }
      g_free(resdata);
 		 signal_pending();
+     return 1;
 	}
+  else
+  {
+     return 0;
+  }
 }
 
 struct pollfd polls[4];
 struct timespec ival;
+//main processing iteration, processing normal queues (inbound, and outbound)
 gint timer_callback(gpointer data)
 {
 	int i;
@@ -148,6 +291,14 @@ void signal_pending()
    g_cond_signal(pending_cond);
 }
 
+
+/*
+thread, which processes pending packets in pending queues
+pending queue only processed, when data received from gui.
+then we process all packet from queue, sorts out, which has matching non-pending rule,
+then put back the others
+we can only(?) estimate the size of the pending queue
+*/
 gpointer pending_thread_run(gpointer data)
 {
    cond_mutex = g_mutex_new();
@@ -171,7 +322,7 @@ gpointer pending_thread_run(gpointer data)
 						rv = recv(out_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
 						if (rv > 0)
 						{
-		    			printf("Packet received\n");
+		    			printf("Packet received in outbound pending queue\n");
 		    			nfq_handle_packet(out_pending_handle,buf,rv);
 							printf("Packet handled\n");
 						}
@@ -184,7 +335,7 @@ gpointer pending_thread_run(gpointer data)
 		        rv = recv(in_pending_fd,buf,sizeof(buf),MSG_DONTWAIT);
 		        if (rv > 0)
 		        {
-		          printf("Packet received\n");
+		          printf("Packet received in inbound pending queue\n");
 		          nfq_handle_packet(in_pending_handle,buf,rv);
 		          printf("Packet handled\n");
 		        }
@@ -194,6 +345,9 @@ gpointer pending_thread_run(gpointer data)
    }
 }
 
+/* initializing netlink queues
+4 queues - 2 onbound, 2 outbound (normal+pending per direction)
+pendign queues are for packets, which hasn't been confirmed from gui */
 void init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *fd,nfq_callback *cb,int queue_num)
 {
 	(*handle) = nfq_open();
@@ -232,13 +386,18 @@ void init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,int *f
 
 void close_queue(struct nfq_handle *handle,struct nfq_q_handle *qhandle)
 {
- printf("Destroy queue\n");
+	printf("Destroy queue\n");
 	nfq_destroy_queue(qhandle);
 	printf("Destroy handle\n");
   nfq_close(handle);  
 }
 
 int end = 0;
+
+void signal_quit(int signum)
+{
+  end = 1;
+};
 
 int main(int argc,char** argv)
 {
@@ -247,18 +406,22 @@ int main(int argc,char** argv)
 	init_queue(&out_handle,&out_qhandle,&out_fd,out_queue_cb,0);
   init_queue(&out_pending_handle,&out_pending_qhandle,&out_pending_fd,out_pending_cb,3);
   init_queue(&in_pending_handle,&in_pending_qhandle,&in_pending_fd,in_pending_cb,2);
+  signal(SIGTERM,signal_quit);
+  signal(SIGINT,signal_quit);
   g_thread_init(NULL);
   pending_cond = g_cond_new();
   to_gui = g_async_queue_new();
   to_daemon = g_async_queue_new();
-  gui_thread = g_thread_create(gui_ipc,NULL,1,NULL);
+  gui_thread = g_thread_create(gui_ipc_thread,NULL,1,NULL);
   pending_thread = g_thread_create(pending_thread_run,NULL,1,NULL);
   phx_apptable_init();
+	parse_config();
 	while(!end)
 	{
     timer_callback(NULL);
 		sleep(0);
 	};
+  close(daemon_socket);
   printf("Closing netlink connections\n");
   close_queue(out_handle,out_qhandle);
 	close_queue(in_handle,in_qhandle);

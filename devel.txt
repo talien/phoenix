@@ -23,6 +23,7 @@ TODO:
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
 	- daemon-client modell után, client feladata
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
+  - ICMP reject mark alapján szétválogatni,.
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell KÉSZ
  - zónázás
@@ -32,6 +33,7 @@ TODO:
    a /proc-ban, akkor törölni.
  - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás?
  - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
+ - per host tiltás
 
 Koncepció:
  - zona - program - instance
@@ -49,4 +51,6 @@ Koncepció:
      - int verdict -> or verdict has direction?  
  - zona->zone_id
   - verdictek: ACCEPT,ACCEPT_INST,ACCEPT_CONN,DENIED,DENIED_INST,DENIED_CONN
-
+ - config szabályok:
+	- [rule]
+  -   program,sport,sip,sdomain,dport,dip,ddomain,verdict

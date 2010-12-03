@@ -122,7 +122,7 @@ int get_proc_from_conn(struct phx_conn_data* c,int direction)
 	if (!tcp)
 	{
 		perror("Error opening file:");
-		exit(1);
+		return -1;
 	}
 	while ( fgets(buf,sizeof(buf),tcp) > 0)
 	{
@@ -169,7 +169,7 @@ int get_proc_from_conn(struct phx_conn_data* c,int direction)
 	if (!tcp)
 	{
 		perror("Error opening file:");
-		exit(1);
+		return -1;
 	}
   printf("Searching in tcp6 connections\n");
 	while ( fgets(buf,sizeof(buf),tcp) > 0)

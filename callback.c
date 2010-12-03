@@ -30,7 +30,7 @@ void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict)
    }
    else
    {
-		  g_hash_table_insert(chain,hash,rule);
+    g_hash_table_insert(chain,hash,rule);
    }
    g_mutex_unlock(apptable_lock);
 };
@@ -59,24 +59,24 @@ struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direct
 
 int phx_data_extract(unsigned char* payload, struct phx_conn_data *cdata, int direction)
 {
-  unsigned int headlen;
-  headlen = (payload[0] % 16) * 4;
-  cdata->sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
-  cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
-  strncpy(cdata->destip,payload+16,4);
-  strncpy(cdata->srcip,payload+12,4);
-  cdata->direction = direction;
-  return get_proc_from_conn(cdata,direction);
+	unsigned int headlen;
+	headlen = (payload[0] % 16) * 4;
+	cdata->sport = (unsigned char)payload[headlen] * 256 + (unsigned char)payload[headlen + 1];
+	cdata->dport = (unsigned char)payload[headlen + 2] * 256 + (unsigned char)payload[headlen + 3];
+	strncpy(cdata->destip,payload+16,4);
+	strncpy(cdata->srcip,payload+12,4);
+	cdata->direction = direction;
+	return get_proc_from_conn(cdata,direction);
 }
 
 int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data)
 {
-	int id = 0;
-	int plen = 0, extr_res = 0;
+    int id = 0;
+    int plen = 0, extr_res = 0;
 	struct nfqnl_msg_packet_hdr *ph;
 	unsigned char* payload;
-	GString* srcip;
-	GString* destip;
+	GString* srcip = NULL;
+	GString* destip = NULL;
   struct phx_conn_data *conndata = NULL, *resdata = NULL;
 	printf("==Outbound callback called==\n");
 	ph = nfq_get_msg_packet_hdr(nfad);
@@ -85,21 +85,32 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 	printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
   extr_res = phx_data_extract(payload,conndata,OUTBOUND);
+ 	//swrite_ip(payload + 12,srcip,0);
+//  srcip = phx_dns_lookup(payload + 12);
+//	destip = phx_dns_lookup(payload + 16);
+  if (destip == NULL)
+   destip = phx_write_ip(payload + 16);
+  if (srcip == NULL)
+   srcip = phx_write_ip(payload + 12);
+
+  printf("%s:%d -> %s:%d\n",srcip->str,conndata->sport,destip->str,conndata->dport);
+  g_string_free(srcip,TRUE);
+  g_string_free(destip,TRUE);
+	if (conndata->proc_name == 0)
+	{
+		printf("Couldn't determine process name, dropping packet\n");
+		g_free(conndata);
+   	return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);	
+	}
   if (extr_res == -1)
 	{
     printf("Connection timeouted, dropping packet\n");
 		return nfq_set_verdict(out_qhandle,id,NF_DROP,plen,payload);	
 	} 
-	//swrite_ip(payload + 12,srcip,0);
-  srcip = phx_dns_lookup(payload + 12);
-	destip = phx_dns_lookup(payload + 16);
-  if (destip == NULL)
-   destip = phx_write_ip(payload + 16);
-  printf("%s:%d -> %s:%d\n",srcip->str,conndata->sport,destip->str,conndata->dport);
-  g_string_free(srcip,TRUE);
-  g_string_free(destip,TRUE);
   struct phx_app_rule* rule;
   rule = phx_apptable_lookup(conndata->proc_name,conndata->pid, OUTBOUND);
+	printf("Printing procname:");
+	printf("%s\n",conndata->proc_name->str);
   if (rule)
   {
      if (rule->verdict == ACCEPTED)
@@ -120,9 +131,14 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
 		 {
  				 printf("Program %s found in list, asking again\n",conndata->proc_name->str);
 				 g_async_queue_push(to_gui,conndata);
+				 //This code is needed here, because i have to "jump over" the next DENY_CONN section
+				 printf("Data pushed to queue in outbound section, verdict ASK, marking 0x2\n");
+  			 pending_conn_count++;
+				 return nfq_set_verdict_mark(out_qhandle,id,NF_REPEAT,htonl(0x2),plen,payload);
 		 }
      if (rule->verdict == DENY_CONN)	
      {
+			 printf("%d\n",conndata->proc_name);
 		 	 printf("Program %s found in list, denying for this time\n",conndata->proc_name->str);
     	 g_string_free(conndata->proc_name,TRUE);
     	 g_free(conndata);
@@ -136,7 +152,7 @@ int out_queue_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data 
     phx_apptable_insert(conndata,OUTBOUND,NEW);
     g_async_queue_push(to_gui,conndata);
   }
-  printf("Data pushed to queue\n");
+  printf("Data pushed to queue in outbound section, no verdict, marking 0x2\n");
   pending_conn_count++;
 	return nfq_set_verdict_mark(out_qhandle,id,NF_REPEAT,htonl(0x2),plen,payload);
 }
@@ -205,15 +221,15 @@ int out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg, struct nfq_d
   printf("Payload length:%d\n",plen);
   conndata = g_new0(struct phx_conn_data,1);
   extr_res = phx_data_extract(payload,conndata,OUTBOUND);
-  if (extr_res == -1)
-	{
-     printf("Connection timeouted, dropping packet\n");
-     return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);	
-	}
   write_ip(payload + 12); printf(":%d\n",conndata->sport);
   write_ip(payload + 16); printf(":%d\n",conndata->dport);
   swrite_ip(payload + 12,srcip,0);
   swrite_ip(payload + 16,destip,0);
+	if (extr_res == -1)
+	{
+		printf("Connection timeouted, dropping packet\n");
+		return nfq_set_verdict(out_pending_qhandle,id,NF_DROP,plen,payload);	
+	}
   struct phx_app_rule* rule = phx_apptable_lookup(conndata->proc_name,conndata->pid,OUTBOUND);
   if (rule)
   {

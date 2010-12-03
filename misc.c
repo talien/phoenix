@@ -89,12 +89,14 @@ GString* get_user(guint32 pid)
   char buf[1024];
   sprintf(buf,"/proc/%d/status",pid);
   FILE* statf = fopen(buf,"r");
+  if (statf == NULL) return NULL;
   int i = 0;
   while ( i < 7) { fgets(buf,sizeof(buf),statf); i++; }
   int uid;
   sscanf(buf,"%*s %d %*d %*d %*d",&uid);
 //  printf("uid: %d\n",uid);
   struct passwd* pass = getpwuid(uid);
+  close(statf);
   return g_string_new(pass->pw_name);
 }
 

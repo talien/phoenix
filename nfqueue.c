@@ -79,7 +79,7 @@ gboolean gui_timer_callback(gpointer data)
   if (conndata->direction == OUTBOUND)
   {
     GString* srcip = phx_write_ip(conndata->srcip);
-    GString* destip = phx_dns_lookup(conndata->destip);
+    GString* destip = NULL; //phx_dns_lookup(conndata->destip);
     if (destip == NULL)
       destip = phx_write_ip(conndata->destip);
 		dialog = gtk_message_dialog_new((GtkWindow*) NULL,GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_YES_NO,
