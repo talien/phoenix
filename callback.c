@@ -44,14 +44,17 @@ phx_apptable_insert (struct phx_conn_data *cdata, int direction, int verdict)
 struct phx_app_rule *
 phx_apptable_lookup (GString * appname, guint pid, guint direction)
 {
+    log_debug("Looking for app in hashtable, app='%s', pid='%d', direction='%d'\n",appname->str,pid,direction);
     g_mutex_lock (apptable_lock);
     GHashTable *chain = g_hash_table_lookup (apptable, appname->str);
 
     if (!chain)
     {
+	log_debug("Chain not found for app: app='%s'\n", appname->str);
 	g_mutex_unlock (apptable_lock);
 	return NULL;
     }
+    log_debug("Chain found, app='%s'\n", appname->str);
     guint hash = 0 * 4 + direction;
 
     struct phx_app_rule *rule = g_hash_table_lookup (chain, &hash);
@@ -330,6 +333,7 @@ out_pending_cb (struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 				    payload);
 	}
     }
+    log_debug("No applicable verdict found, pushing back to the queue\n");
     return nfq_set_verdict (out_pending_qhandle, id, NF_QUEUE, plen, payload);
 }
 

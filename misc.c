@@ -34,6 +34,24 @@ log_debug (gchar * format, ...)
 
 }
 
+void
+_log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
+{
+    va_list l;
+    gchar msgbuf[2048];
+    struct timeval tv;
+    int sec, msec;
+    if (!gettimeofday(&tv,NULL)) 
+    {
+	sec = tv.tv_sec;
+	msec = tv.tv_usec;
+    }
+    
+    va_start (l, format);
+    g_vsnprintf (msgbuf, sizeof (msgbuf), format, l);
+    printf ("[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
+    va_end (l);
+}
 
 void
 write_ip (unsigned char *buffer)
