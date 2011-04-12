@@ -33,5 +33,6 @@ phx_deserialize_data (char *buffer, int buflen)
 
     memcpy (&(result->pid), buffer + 4 + namelen, buflen - 4 - namelen);
     result->proc_name = g_string_new_len (buffer + 4, namelen);
+    log_debug("Deserializing: verdict='%d'\n",result->state);
     return result;
 }

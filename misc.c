@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <strings.h>
 
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
@@ -73,7 +74,7 @@ phx_write_ip (char ip[4])
 {
     char ipbuf[20];
 
-    memset (ipbuf, sizeof (ipbuf), 0);
+    memset ((void*)ipbuf, 0, sizeof (ipbuf));
     swrite_ip (ip, ipbuf, 0);
     return g_string_new (ipbuf);
 }
@@ -179,9 +180,27 @@ phx_dns_lookup (char ip[4])
     g_string_free (destip, TRUE);
     if (getnameinfo (&sa, sizeof (struct sockaddr), hbuf, sizeof (hbuf),
 		     NULL, 0, 8))
-	return NULL;
+		return NULL;
     else
-	return g_string_new (hbuf);
+		return g_string_new (hbuf);
 }
+
+int parse_network(char* str, char* nw, int* mask)
+{
+    int i, j, prev = 0;
+	char endch = '.';
+	for (j=0; j<4; j++)
+	{
+		if (j == 3) endch = '/';
+		for (i = prev; str[i] != endch && str[i] != '\0'; i++)
+		if (str[i] == '\0')
+			return FALSE;
+		str[i] = '\0';
+		nw[i] = (char)atoi(str+prev);
+		prev = i+1;
+	}
+	*mask = atoi(str+prev);
+	return TRUE;
+}	
 
 #endif

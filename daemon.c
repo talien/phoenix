@@ -12,6 +12,7 @@
 #include <sys/poll.h>
 #include <sys/un.h>
 #include <signal.h>
+#include <ctype.h>
 
 #include <glib.h>
 
@@ -20,6 +21,7 @@
 #include "types.h"
 #include "callback.h"
 #include "serialize.h"
+#include "zones.h"
 
 struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle,
     *out_pending_qhandle;
@@ -36,13 +38,116 @@ char buf[2048];
 
 char phx_buf[2048];
 
-GThread *gui_thread, *pending_thread;
+GThread *gui_thread, *pending_thread, *control_thread;
 
 GCond *pending_cond;
 
 GMutex *cond_mutex;
 
 int daemon_socket = 0;
+
+radix_bit *zones;
+
+#define PHX_STATE_RULE 1
+#define PHX_STATE_ZONE 2
+
+char get_first_char(const char* line)
+{
+    int i = 0;	
+	for (i = 0; isspace(line[i]) && line[i] != '\0'; i++)
+	{
+		
+	}
+	return line[i];
+}
+
+int parse_key_value(const char* line, char* key, char* value)
+{
+	//FIXME: watch for buffer overflows, limit key/value/line len.
+	int invar1 = 0, invar2 = 0, wasvar1 = 0;
+	int j = 0, i;
+	value[0] = '\0';
+	for (i = 0; line[i] != '\0'; i++)
+	{
+		if (!isspace(line[i]))
+		{
+			if ((!invar1) && (!invar2) && (!wasvar1)
+				&& (line[i] != '['))
+			{
+				invar1 = 1;
+				j = 0;
+			}
+			if ((!invar1) && (!invar2) && (wasvar1))
+			{
+				invar2 = 1;
+				j = 0;
+			}
+			if ((line[i] == '='))
+			{
+				invar1 = 0;
+				wasvar1 = 1;
+				key[j] = '\0';
+			}
+			if (invar1)
+			{
+				key[j] = line[i];
+				j++;
+			}
+			if (invar2)
+			{
+				value[j] = line[i];
+				j++;
+			}
+		}
+	}		
+	if (invar2)
+	{
+		value[j] = '\0';
+	}
+	
+	if (!invar2 && !wasvar1)
+	{
+		return FALSE;
+	}
+	else
+	{
+		return TRUE;
+	}
+
+}
+
+int parse_section(const char* line, char* section)
+{
+	int invar1 = 0, wasvar1 = 0;
+	int j = 0, i;
+	section[0] = '\0';
+	for (i = 0; line[i] != '\0'; i++)
+	{
+		if (!isspace(line[i]))
+		{
+			if ((line[i] == '['))
+			{
+				invar1 = 1;
+				j = 0;
+			}
+			if ((line[i] == ']'))
+			{
+				invar1 = 0;
+				wasvar1 = 1;
+				section[j] = '\0';
+			}
+			if (invar1 && line[i] != '[')
+			{
+				section[j] = line[i];
+				j++;
+			}
+		}
+	}
+	if (!wasvar1)
+		return FALSE;
+	return TRUE;
+
+}
 
 void parse_config()
 {
@@ -53,78 +158,68 @@ void parse_config()
 	FILE *conffile = fopen("phx.conf", "r");
 
 	int i, j, verdict, direction = OUTBOUND;
+	int state = 0;
+	int zoneid = 1;
+	zones = g_new0(radix_bit, 1);
 
 	while (fgets(fbuf, sizeof(fbuf), conffile) > 0)
 	{
-		int invar1 = 0, invar2 = 0, wasvar1 = 0;
-
-		j = 0;
-		var2[0] = '\0';
-		for (i = 0; fbuf[i] != '\0'; i++)
+		if (get_first_char(fbuf) == '[')
 		{
-			if (!isspace(fbuf[i]))
+			parse_section(fbuf, var1);
+			log_debug("Conf section: section='%s'\n", var1);
+			if (!strncmp(var1, "rule", 128))
 			{
-				if ((!invar1) && (!invar2) && (!wasvar1)
-				    && (fbuf[i] != '['))
+				if (rule)
 				{
-					invar1 = 1;
-					j = 0;
+					log_debug("Inserting rule\n");
+					phx_apptable_insert(rule, direction, verdict);
 				}
-				if ((!invar1) && (!invar2) && (wasvar1))
+				rule = g_new0(struct phx_conn_data, 1);
+				state = PHX_STATE_RULE;
+			}
+			if (!strncmp(var1, "zones", 128))
+			{
+				if (rule)
 				{
-					invar2 = 1;
-					j = 0;
+					log_debug("Inserting rule\n");
+					phx_apptable_insert(rule, direction, verdict);
 				}
-				if ((fbuf[i] == ']') || (fbuf[i] == '='))
+				rule = NULL;
+				state = PHX_STATE_ZONE;
+			}	
+		}
+		else
+		{
+			parse_key_value(fbuf, var1, var2);
+			log_debug("Variable1: %s Variable2:%s\n", var1, var2);
+			if (state == PHX_STATE_RULE)
+			{
+				if (!strncmp(var1, "program", 128))
 				{
-					invar1 = 0;
-					wasvar1 = 1;
-					var1[j] = '\0';
+					rule->proc_name = g_string_new(var2);
+					rule->pid = 0;
 				}
-				if (invar1)
+				if (!strncmp(var1, "verdict", 128))
 				{
-					var1[j] = fbuf[i];
-					j++;
-				}
-				if (invar2)
-				{
-					var2[j] = fbuf[i];
-					j++;
-				}
-				if (fbuf[i] == '[')
-				{
-					invar1 = 1;
+					if (!strncmp(var2, "deny", 128))
+					{
+						verdict = DENIED;
+					}
+					if (!strncmp(var2, "accept", 128))
+					{
+						verdict = ACCEPTED;
+					}
 				}
 			}
-		}
-		if (invar2)
-		{
-			invar2 = 0;
-			var2[j] = '\0';
-		}
-		log_debug("Variable1: %s Variable2:%s\n", var1, var2);
-		if (!strncmp(var1, "rule", 128))
-		{
-			if (rule)
+			else if (state == PHX_STATE_ZONE)
 			{
-				phx_apptable_insert(rule, direction, verdict);
-			}
-			rule = g_new0(struct phx_conn_data, 1);
-		}
-		if (!strncmp(var1, "program", 128))
-		{
-			rule->proc_name = g_string_new(var2);
-			rule->pid = 0;
-		}
-		if (!strncmp(var1, "verdict", 128))
-		{
-			if (!strncmp(var2, "deny", 128))
-			{
-				verdict = DENIED;
-			}
-			if (!strncmp(var2, "accept", 128))
-			{
-				verdict = ACCEPTED;
+				char buf[4];
+				int mask;
+				log_debug("Adding zone: name='%s', network='%s'\n", var1, var2);
+				parse_network(var2, buf, &mask);
+				zone_add(zones, zoneid, buf, mask);
+				zoneid += 1;
 			}
 		}
 	}
@@ -141,10 +236,11 @@ void init_daemon_socket()
 	struct sockaddr_un local;
 
 	int len;
-
 	daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
-	strcpy(local.sun_path, "phxdsock");
+	local.sun_family = AF_UNIX;
+	strcpy(local.sun_path,"phxdsock");
 	len = strlen(local.sun_path) + sizeof(local.sun_family);
+	unlink(local.sun_path);
 	if (bind(daemon_socket, (struct sockaddr *)&local, len) == -1)
 	{
 		perror("Error on binding daemon socket");
@@ -158,14 +254,24 @@ void init_daemon_socket()
 
 }
 
-void perform_handshake(int sock)
+void handle_query(int sock)
 // GUI sends its uid to daemon, the the connection will be permanent until gui exists
 {
-	char buffer[1024];
-
-	int hs_len = recv(sock, buffer, 1024, 0);
-
-};
+	char* buffer;
+	char command[4096];
+	int data_len = 0;
+	int hs_len = recv(sock, command, 1024, 0);
+	log_debug("Data got: length='%d', data='%s'\n", hs_len, command);
+	if (!strncmp(command,"GET",3))
+	{
+		//sending serialized rule table
+		buffer = phx_apptable_serialize(&data_len);
+		send(sock, buffer, data_len, 0);
+		free(buffer);
+	}
+	close(sock);
+	
+}
 
 gpointer gui_conn_thread(gpointer data)
 // one (two?) thread per gui connection, should watch his on queue from daemon, and answers from gui asynchronous
@@ -180,11 +286,12 @@ gpointer daemon_socket_thread(gpointer data)
 	struct sockaddr_un remote;
 
 	int remote_sock, rsock_len;
-
+	log_debug("Starting daemon control socket thread\n");
 	while (1)
 	{
 		remote_sock = accept(daemon_socket, &remote, &rsock_len);
-		perform_handshake(remote_sock);
+		log_debug("Connection accepted, handling data\n");
+		handle_query(remote_sock);
 	};
 }
 
@@ -245,6 +352,13 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	return conndata;
 }
 
+void signal_pending()
+{
+	g_cond_signal(pending_cond);
+}
+
+
+
 gpointer gui_ipc_thread(gpointer data)
 {
 	g_async_queue_ref(to_daemon);
@@ -278,7 +392,7 @@ int process_gui_queue()
 		{
 			log_debug
 			    ("Found NULL process name, something went wrong\n");
-			return;
+			return 0;
 		}
 		rule =
 		    phx_apptable_lookup(resdata->proc_name, resdata->pid,
@@ -349,11 +463,6 @@ gint timer_callback(gpointer data)
 	return 1;
 }
 
-void signal_pending()
-{
-	g_cond_signal(pending_cond);
-}
-
 /*
 thread, which processes pending packets in pending queues
 pending queue only processed, when data received from gui.
@@ -378,7 +487,7 @@ gpointer pending_thread_run(gpointer data)
 		polls[1].fd = in_pending_fd;
 		polls[1].events = POLLIN | POLLPRI;
 		log_debug("Polling in pending thread\n");
-		ret = poll(polls, 2, 1000);
+		ret = poll(polls, 2, 0);
 		log_debug("Poll finished in pending thread\n");
 		if (ret > 0)
 		{
@@ -475,7 +584,7 @@ int end = 0;
 
 void signal_quit(int signum)
 {
-	end = 1;
+	end = 1;    
 };
 
 int main(int argc, char **argv)
@@ -487,6 +596,7 @@ int main(int argc, char **argv)
 		   out_pending_cb, 3);
 	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
 		   in_pending_cb, 2);
+	init_daemon_socket();
 	signal(SIGTERM, signal_quit);
 	signal(SIGINT, signal_quit);
 	g_thread_init(NULL);
@@ -495,8 +605,12 @@ int main(int argc, char **argv)
 	to_daemon = g_async_queue_new();
 	gui_thread = g_thread_create(gui_ipc_thread, NULL, 1, NULL);
 	pending_thread = g_thread_create(pending_thread_run, NULL, 1, NULL);
+	control_thread = g_thread_create(daemon_socket_thread, NULL, 1, NULL);
 	phx_apptable_init();
 	parse_config();
+	char* kakukk = phx_apptable_serialize(NULL);
+	printf("%s", kakukk);
+	free(kakukk);
     // some kind of "Main Loop"
 	while (!end)
 	{

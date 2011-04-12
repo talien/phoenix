@@ -20,7 +20,7 @@ struct phx_conn_data
    guint32 sport;
    gchar destip[4];
    guint32 dport;
-	 guint32 state;
+   guint32 state;
    guint32 direction;
 };
 
