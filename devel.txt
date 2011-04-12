@@ -14,6 +14,19 @@ Gui			<-	callback
 	V						V
 Got			->	Accept or Drop:
 
+packet handler callback spec:
+ - kibányászni az infókat.
+ - process/connection ellenőrzés: ha nincs olyan, akkor bye-bye.
+ - zónázás: zónafeloldás
+ - döntés:
+ inbound, outbound:
+   - ha van már rá rule, akkor verdict alapján dönteni.
+   - ha nincs, létrehozni, ASK-ra tenni, csomagot markolni, lánc-ba visszadobni (nf_repeat).
+ pending inb, outb:
+   - ha van rule, akkor verdict alapján dönteni.
+   - ha nincs rule, akkor visszadobni ugyanabba a queue-ba (nf_queue).
+
+
 TODO:
  - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!) KÉSZ
   - hogyan: bejövő kapcsolatokat engedni programokra, bejövő lista  KÉSZ
@@ -21,17 +34,18 @@ TODO:
   - bejövő kapcsolatok tcp6-os problémáját megnézni! KÉSZ
  - Vuze tesztelés, tcp6 connection timeoutok megnézése jobban
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
-	- daemon-client modell után, client feladata
+	- daemon-client modell után, client feladata FÉLIG KÉSZ
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
   - ICMP reject mark alapján szétválogatni,.
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell KÉSZ
- - zónázás
+ - zónázás FÉLIG KÉSZ
+ - zónákat rule-okbe beépíteni
  - performancia javítás részletesen KÉSZ
   - tesztelés: connection burst
  - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik
-   a /proc-ban, akkor törölni.
- - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás?
+   a /proc-ban, akkor törölni. Túl nagy falat, legvégén, ha lesz idő
+ - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás? -> inkább conntrack
  - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
  - per host tiltás
 

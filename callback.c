@@ -180,90 +180,70 @@ phx_data_extract(unsigned char *payload, struct phx_conn_data *cdata,
 	return get_proc_from_conn(cdata, direction);
 }
 
-int
-out_queue_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
-	     struct nfq_data *nfad, void *data)
+int phx_extract_nfq_pkt_data(struct nfq_data *nfad, int* id, char** payload)
 {
-	int id = 0;
-
-	int plen = 0, extr_res = 0;
-
 	struct nfqnl_msg_packet_hdr *ph;
-
-	unsigned char *payload;
-
-	GString *srcip = NULL;
-
-	GString *destip = NULL;
-
-	struct phx_app_rule *rule;
-
-	struct phx_conn_data *conndata = NULL, *resdata = NULL;
-
-	log_debug("==Outbound callback called==\n");
-
+	int len;
 	ph = nfq_get_msg_packet_hdr(nfad);
-	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, (char **)&payload);
-	log_debug("Payload length:%d\n", plen);
+	*id = ntohl(ph->packet_id);
+	len = nfq_get_payload(nfad, payload);
+	return len;
+}
 
-	conndata = g_new0(struct phx_conn_data, 1);
-	extr_res = phx_data_extract(payload, conndata, OUTBOUND);
-	//swrite_ip(payload + 12,srcip,0);
-//  srcip = phx_dns_lookup(payload + 12);
-//      destip = phx_dns_lookup(payload + 16);
 
-	if (destip == NULL)
-		destip = phx_write_ip(payload + 16);
+//FIXME: find a better name
+int general_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
+	      struct nfq_data *nfad, void *data)
+{
+	int id, pkt_len, queue_num, direction, extr_res, pending = 0;
+	char* payload;
+	struct phx_conn_data *conndata;
+	struct phx_app_rule *rule;
+	guint32 nfq_verdict, mark;
 
-	if (srcip == NULL)
-		srcip = phx_write_ip(payload + 12);
+	log_debug("General callback called\n");
+	
+	// extracting packet metainfo from nfqueue packet header
+	pkt_len = phx_extract_nfq_pkt_data(nfad, &id, &payload);
+	log_debug("Packet info: id='%d', len='%d'\n", id, pkt_len);
 
-	log_debug("%s:%d -> %s:%d\n", srcip->str, conndata->sport, destip->str,
-		  conndata->dport);
-	g_string_free(srcip, TRUE);
-	g_string_free(destip, TRUE);
+	conndata = phx_conn_data_new();
 
-	if (conndata->proc_name == 0)
-	{
-		log_debug("Couldn't determine process name, dropping packet\n");
-		g_free(conndata);
-		return nfq_set_verdict(out_qhandle, id, NF_DROP, plen, payload);
+	//deciding if connection is inbound, very hackish, need rewrite
+	queue_num = *((int*)data);
+
+	if (queue_num == 0 || queue_num == 3) { 
+		direction = OUTBOUND;
+	} else { 
+		direction = INBOUND;
 	}
+	if (queue_num == 2 || queue_num == 3)
+		pending = 1;
 
-	// connection lookup failed under /proc
+	// extracting connection data from payload
+	extr_res = phx_data_extract(payload, conndata, direction);
 	if (extr_res == -1)
 	{
 		log_debug("Connection timeouted, dropping packet\n");
-		return nfq_set_verdict(out_qhandle, id, NF_DROP, plen, payload);
+		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
+				       payload);
 	}
 
-
-	// rule lookup about connection data
-	rule =
-	    phx_apptable_lookup(conndata->proc_name, conndata->pid, OUTBOUND);
-
-	log_debug("Printing procname: %s\n", conndata->proc_name->str);
-
+	rule = phx_apptable_lookup(conndata->proc_name, conndata->pid, direction);
 	if (rule)
 	{
+		log_debug("Rule found for program\n");
 		if (rule->verdict == ACCEPTED)
 		{
 			log_debug("Program %s found in list, accepting\n",
 				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			return nfq_set_verdict(out_qhandle, id, NF_ACCEPT, plen,
-					       payload);
+			nfq_verdict = NF_ACCEPT;
 		}
 		if (rule->verdict == DENIED)
 		{
 			log_debug("Program %s found in list, denying\n",
 				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			return nfq_set_verdict(out_qhandle, id, NF_DROP, plen,
-					       payload);
+			nfq_verdict = NF_DROP;
 		}
 		if (rule->verdict == ASK)
 		{
@@ -271,11 +251,8 @@ out_queue_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 				  conndata->proc_name->str);
 			g_async_queue_push(to_gui, conndata);
 			//This code is needed here, because i have to "jump over" the next DENY_CONN section
-			log_debug
-			    ("Data pushed to queue in outbound section, verdict ASK, marking 0x2\n");
-			pending_conn_count++;
-			return nfq_set_verdict_mark(out_qhandle, id, NF_REPEAT,
-						    htonl(0x2), plen, payload);
+			mark = direction == OUTBOUND ? 0x2 : 0x1;
+			nfq_verdict = NF_REPEAT;
 		}
 		if (rule->verdict == DENY_CONN)
 		{
@@ -283,228 +260,86 @@ out_queue_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 			log_debug
 			    ("Program %s found in list, denying for this time\n",
 			     conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
 			pending_conn_count--;
 			rule->verdict = ASK;
-			return nfq_set_verdict(out_qhandle, id, NF_DROP, plen,
-					       payload);
+			nfq_verdict = NF_DROP;
 		}
+		if (rule->verdict == NEW)
+		{
+			if (pending)
+			{
+				log_debug("Rule found with new verdict in pending, pushing back to same queue, program='%s'\n",conndata->proc_name->str);
+				nfq_verdict = NF_QUEUE;
+			}
+			else
+			{
+				log_debug("Rule found with new verdict in non-pending, pushing to pending, program='%s'\n", conndata->proc_name->str);
+				mark = direction == OUTBOUND ? 0x2 : 0x1;
+				nfq_verdict = NF_REPEAT;
+			}
+		}
+
 	} else
 	{
-		phx_apptable_insert(conndata, OUTBOUND, NEW);
-		g_async_queue_push(to_gui, conndata);
-	}
-	log_debug
-	    ("Data pushed to queue in outbound section, no verdict, marking 0x2\n");
-	pending_conn_count++;
-	return nfq_set_verdict_mark(out_qhandle, id, NF_REPEAT, htonl(0x2),
-				    plen, payload);
-}
-
-int
-in_queue_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
-	    struct nfq_data *nfad, void *data)
-{
-	struct nfqnl_msg_packet_hdr *ph;
-
-	unsigned char *payload;
-
-	unsigned int id = 0, plen = 0;
-
-	int res;
-
-	char srcip[20], destip[20];
-
-	struct phx_conn_data *conndata;
-
-	log_debug("==Inbound callback called==\n");
-	ph = nfq_get_msg_packet_hdr(nfad);
-	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, (char **)&payload);
-	conndata = g_new0(struct phx_conn_data, 1);
-
-	res = phx_data_extract(payload, conndata, INBOUND);
-	swrite_ip(payload + 12, srcip, 0);
-	swrite_ip(payload + 16, destip, 0);
-	if (res != -1)
-	{
-		log_debug("Packet received:%s:%d -> %s:%d on program %s\n",
-			  srcip, conndata->sport, destip, conndata->dport,
-			  conndata->proc_name->str);
-		log_debug("Inbound connection on listening port\n");
-		struct phx_app_rule *rule =
-		    phx_apptable_lookup(conndata->proc_name, conndata->pid,
-					INBOUND);
-		if (rule)
+		log_debug("No rule found for program\n");
+		if (pending)
 		{
-			if (rule->verdict == ACCEPTED)
-			{
-				log_debug("Accepting inbound connection\n");
-				return nfq_set_verdict(in_qhandle, id,
-						       NF_ACCEPT, plen,
-						       payload);
-			}
-			if (rule->verdict == DENIED)
-			{
-				log_debug("Denying inbound connection\n");
-				return nfq_set_verdict(in_qhandle, id, NF_DROP,
-						       plen, payload);
-			}
-		} else
+			//no rule in pending queue, what should i do? pushing back doesn't hurt...
+			nfq_verdict = NF_QUEUE;
+		}
+		else
 		{
-			phx_apptable_insert(conndata, INBOUND, NEW);
+			// no rule in non-pending queue, creating one and pushing to queue
+			log_debug("No rule found, inserting a new one for program, program='%s'\n",conndata->proc_name->str);
+			phx_conn_data_ref(conndata);
+			phx_apptable_insert(conndata, direction, NEW);
+			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
+			//sending to pending queue
+			mark = direction == OUTBOUND ? 0x2: 0x1;
+			nfq_verdict = NF_REPEAT;
 		}
-		in_pending_count++;
-		return nfq_set_verdict_mark(in_qhandle, id, NF_REPEAT,
-					    htonl(0x1), plen, payload);
-	} else
-	{
-		log_debug("Nothing listens on port %d, dropping\n",
-			  conndata->dport);
-		return nfq_set_verdict(in_qhandle, id, NF_DROP, plen, payload);
 	}
+	phx_conn_data_unref(conndata);
+
+	// increasing/decresing pending_conn_count, very hackish, need rework
+	if (pending)
+	{
+		if (nfq_verdict == NF_ACCEPT || nfq_verdict == NF_DROP)
+		{
+			if (direction == INBOUND)
+			{
+				in_pending_count--;
+			}
+			else
+			{
+				pending_conn_count--;
+			}
+		}
+	}
+	else
+	{
+		if (nfq_verdict == NF_REPEAT)
+			if (direction == INBOUND)
+			{
+				in_pending_count++;
+			}
+			else
+			{
+				pending_conn_count++;
+			}
+		
+	}
+
+	if (mark != 0)
+	{
+		return nfq_set_verdict_mark(qh, id, nfq_verdict, htonl(mark),
+				    pkt_len, payload);
+	}
+	else
+	{
+		return nfq_set_verdict(qh, id, nfq_verdict, pkt_len, payload);
+	}
+
 }
 
-int
-out_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
-	       struct nfq_data *nfad, void *data)
-{
-	int id = 0, plen = 0, extr_res = 0;
-
-	struct nfqnl_msg_packet_hdr *ph;
-
-	unsigned char *payload;
-
-	char srcip[20];
-
-	char destip[20];
-
-	struct phx_conn_data *conndata;
-
-	log_debug("==Out pending callback called==\n");
-	ph = nfq_get_msg_packet_hdr(nfad);
-	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, (char **)&payload);
-	log_debug("Payload length:%d\n", plen);
-	conndata = g_new0(struct phx_conn_data, 1);
-
-	extr_res = phx_data_extract(payload, conndata, OUTBOUND);
-//	write_ip(payload + 12);
-//	printf(":%d\n", conndata->sport);
-//	write_ip(payload + 16);
-//	printf(":%d\n", conndata->dport);
-	swrite_ip(payload + 12, srcip, 0);
-	swrite_ip(payload + 16, destip, 0);
-	if (extr_res == -1)
-	{
-		log_debug("Connection timeouted, dropping packet\n");
-		return nfq_set_verdict(out_pending_qhandle, id, NF_DROP, plen,
-				       payload);
-	}
-	struct phx_app_rule *rule =
-	    phx_apptable_lookup(conndata->proc_name, conndata->pid, OUTBOUND);
-	if (rule)
-	{
-		if (rule->verdict == ACCEPTED)
-		{
-			log_debug("Program %s found in list, accepting\n",
-				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			pending_conn_count--;
-			return nfq_set_verdict(out_pending_qhandle, id,
-					       NF_ACCEPT, plen, payload);
-		}
-		if (rule->verdict == DENIED)
-		{
-			log_debug("Program %s found in list, denying\n",
-				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			pending_conn_count--;
-			return nfq_set_verdict(out_pending_qhandle, id, NF_DROP,
-					       plen, payload);
-		}
-		if (rule->verdict == DENY_CONN)
-		{
-			log_debug
-			    ("Program %s found in list, denying for this time\n",
-			     conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			pending_conn_count--;
-			rule->verdict = ASK;
-			return nfq_set_verdict(out_pending_qhandle, id, NF_DROP,
-					       plen, payload);
-		}
-	}
-	log_debug("No applicable verdict found, pushing back to the queue\n");
-	return nfq_set_verdict(out_pending_qhandle, id, NF_QUEUE, plen,
-			       payload);
-}
-
-int
-in_pending_cb(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
-	      struct nfq_data *nfad, void *data)
-{
-	int id = 0, plen = 0, extr_res = 0;
-
-	struct nfqnl_msg_packet_hdr *ph;
-
-	unsigned char *payload;
-
-	char srcip[20];
-
-	char destip[20];
-
-	struct phx_conn_data *conndata;
-
-	log_debug("==In pending callback called==\n");
-	ph = nfq_get_msg_packet_hdr(nfad);
-	id = ntohl(ph->packet_id);
-	plen = nfq_get_payload(nfad, (char **)&payload);
-	log_debug("Payload length:%d\n", plen);
-	conndata = g_new0(struct phx_conn_data, 1);
-
-	extr_res = phx_data_extract(payload, conndata, INBOUND);
-	if (extr_res == -1)
-	{
-		log_debug("Connection timeouted, dropping packet\n");
-		return nfq_set_verdict(in_pending_qhandle, id, NF_DROP, plen,
-				       payload);
-	}
-	write_ip(payload + 12);
-	printf(":%d\n", conndata->sport);
-	write_ip(payload + 16);
-	printf(":%d\n", conndata->dport);
-	swrite_ip(payload + 12, srcip, 0);
-	swrite_ip(payload + 16, destip, 0);
-	struct phx_app_rule *rule =
-	    phx_apptable_lookup(conndata->proc_name, conndata->pid, INBOUND);
-	if (rule)
-	{
-		if (rule->verdict == ACCEPTED)
-		{
-			log_debug("Program %s found in list, accepting\n",
-				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			pending_conn_count--;
-			return nfq_set_verdict(in_pending_qhandle, id,
-					       NF_ACCEPT, plen, payload);
-		}
-		if (rule->verdict == DENIED)
-		{
-			log_debug("Program %s found in list, denying\n",
-				  conndata->proc_name->str);
-			g_string_free(conndata->proc_name, TRUE);
-			g_free(conndata);
-			pending_conn_count--;
-			return nfq_set_verdict(in_pending_qhandle, id, NF_DROP,
-					       plen, payload);
-		}
-	}
-	return nfq_set_verdict(in_pending_qhandle, id, NF_QUEUE, plen, payload);
-}

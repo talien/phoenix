@@ -12,7 +12,7 @@
 #define ACCEPT_INST 6
 #define ASK 7
 
-struct phx_conn_data
+typedef struct phx_conn_data
 {
    GString* proc_name;
    guint32 pid;
@@ -22,7 +22,8 @@ struct phx_conn_data
    guint32 dport;
    guint32 state;
    guint32 direction;
-};
+   guint32 refcnt;
+} phx_conn_data;
 
 struct phx_app_rule
 {
@@ -32,6 +33,8 @@ struct phx_app_rule
   guint32 direction;
 };
 
-
+phx_conn_data* phx_conn_data_new();
+void phx_conn_data_ref(phx_conn_data* cdata);
+void phx_conn_data_unref(phx_conn_data* cdata);
 
 #endif

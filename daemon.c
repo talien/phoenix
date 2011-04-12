@@ -538,6 +538,9 @@ void
 init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,
 	   int *fd, nfq_callback * cb, int queue_num)
 {
+	int *data;
+	data = g_new0(int,1);
+	*data = queue_num;
 	(*handle) = nfq_open();
 	if (!(*handle))
 	{
@@ -556,7 +559,7 @@ init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,
 		exit(1);
 	}
 	log_debug("Creating queue\n");
-	(*qhandle) = nfq_create_queue((*handle), queue_num, cb, NULL);
+	(*qhandle) = nfq_create_queue((*handle), queue_num, cb, data);
 	if (!(*qhandle))
 	{
 		perror("Creating queue");
@@ -590,12 +593,19 @@ void signal_quit(int signum)
 int main(int argc, char **argv)
 {
 	log_debug("Opening netlink connections\n");
-	init_queue(&in_handle, &in_qhandle, &in_fd, in_queue_cb, 1);
+/*	init_queue(&in_handle, &in_qhandle, &in_fd, in_queue_cb, 1);
 	init_queue(&out_handle, &out_qhandle, &out_fd, out_queue_cb, 0);
 	init_queue(&out_pending_handle, &out_pending_qhandle, &out_pending_fd,
 		   out_pending_cb, 3);
 	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
-		   in_pending_cb, 2);
+		   in_pending_cb, 2);*/
+	init_queue(&in_handle, &in_qhandle, &in_fd, general_callback, 1);
+	init_queue(&out_handle, &out_qhandle, &out_fd, general_callback, 0);
+	init_queue(&out_pending_handle, &out_pending_qhandle, &out_pending_fd,
+		   general_callback, 3);
+	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
+		   general_callback, 2);
+
 	init_daemon_socket();
 	signal(SIGTERM, signal_quit);
 	signal(SIGINT, signal_quit);
