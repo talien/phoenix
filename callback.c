@@ -191,8 +191,7 @@ int phx_extract_nfq_pkt_data(struct nfq_data *nfad, int* id, char** payload)
 }
 
 
-//FIXME: find a better name
-int general_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
+int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 	      struct nfq_data *nfad, void *data)
 {
 	int id, pkt_len, queue_num, direction, extr_res, pending = 0;

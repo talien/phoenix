@@ -593,18 +593,12 @@ void signal_quit(int signum)
 int main(int argc, char **argv)
 {
 	log_debug("Opening netlink connections\n");
-/*	init_queue(&in_handle, &in_qhandle, &in_fd, in_queue_cb, 1);
-	init_queue(&out_handle, &out_qhandle, &out_fd, out_queue_cb, 0);
+	init_queue(&in_handle, &in_qhandle, &in_fd, phx_queue_callback, 1);
+	init_queue(&out_handle, &out_qhandle, &out_fd, phx_queue_callback, 0);
 	init_queue(&out_pending_handle, &out_pending_qhandle, &out_pending_fd,
-		   out_pending_cb, 3);
+		   phx_queue_callback, 3);
 	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
-		   in_pending_cb, 2);*/
-	init_queue(&in_handle, &in_qhandle, &in_fd, general_callback, 1);
-	init_queue(&out_handle, &out_qhandle, &out_fd, general_callback, 0);
-	init_queue(&out_pending_handle, &out_pending_qhandle, &out_pending_fd,
-		   general_callback, 3);
-	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
-		   general_callback, 2);
+		   phx_queue_callback, 2);
 
 	init_daemon_socket();
 	signal(SIGTERM, signal_quit);
