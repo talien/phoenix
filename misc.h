@@ -13,7 +13,7 @@ void dumpascii(unsigned char* buffer,int len);
 GString* get_user(guint32 pid);
 GString* phx_write_ip(char ip[4]);
 GString* phx_dns_lookup(char ip[4]);
-int parse_network(const char* str, char* nw, int mask);
+int parse_network(const char* str, char* nw, int *mask);
 //void _log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
 //void log_debug(gchar* format, ...);
 

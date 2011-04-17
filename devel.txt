@@ -26,6 +26,29 @@ packet handler callback spec:
    - ha van rule, akkor verdict alapján dönteni.
    - ha nincs rule, akkor visszadobni ugyanabba a queue-ba (nf_queue).
 
+alias:
+  - conf-ban külön rész
+  - ghashtable a lookup-nak
+  - GString*-ek a hashtable-ben
+  - char* a kulcs.
+  - sima lookup, és kész.
+
+kliens fele communikáció:
+ - kell:
+  * IP: forrás, cél, (char[4])
+  * Port: forrás, cél: guint32
+  * Zóna: forrás, cél: névvel (string w/len)
+  * Program név: string w/len
+  * Irány: guint32
+  * dummy verdict: guint32
+ - daemon connection-t átküldi a gui-threadnek, ami összerakja a kliens fele menő adatokat(zónafeloldás, stb).
+ - kliens megkapja, verdict-et mond, visszaküldi a servernek.
+ - server beállítja a verdict-et a megfelelő rule-nál-> rule lookup-ot csinál a kliens által visszaküldött adatokból.
+
+végleges program feature-jei:
+ - daemon, client, control
+ - client saját window-val
+ - remote control, central
 
 TODO:
  - input connection handling (phx_data_extract IN-OUTBOUND-ra figyelni!) KÉSZ
@@ -39,8 +62,8 @@ TODO:
   - ICMP reject mark alapján szétválogatni,.
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell KÉSZ
- - zónázás FÉLIG KÉSZ
- - zónákat rule-okbe beépíteni
+ - zónázás KÉSZ
+ - zónákat rule-okbe beépíteni KÉSZ
  - performancia javítás részletesen KÉSZ
   - tesztelés: connection burst
  - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik

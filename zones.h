@@ -1,5 +1,7 @@
 #ifndef _PHX_ZONES_H
 #define _PHX_ZONES_H
+
+#include <glib.h>
 //FIXME:byte should b really byte, or char
 
 typedef struct radix_byte
@@ -19,7 +21,7 @@ typedef struct radix_bit
 } radix_bit;
 
 
-int zone_lookup(radix_bit* zone_tree, char* ip);
-int zone_add(radix_bit* zone_tree, char* ip, int mask, int id);
+int zone_lookup(radix_bit* zone_tree, guchar* ip);
+int zone_add(radix_bit* zone_tree, guchar* ip, int mask, int id);
 radix_byte* radix_byte_new(int value, int needchild);
 #endif

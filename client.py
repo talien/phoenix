@@ -4,21 +4,45 @@ import os,sys,socket, getpass, select, struct
 
 dir_map = { 0 : "Outbound", 1 : "Inbound" }
 
+
+
+def phx_client_unpack(sformat, data):
+	i = 0
+	amount = 0
+	pd = 0
+	t = ()
+	while i < len(sformat):
+		needpack = True
+		if ( sformat[i] == 'S' ):
+			(slen,) = struct.unpack("<I", data[pd:pd+4])
+			pd += 4
+			gvar = struct.unpack("%ds" % slen, data[pd:pd+slen])
+			pd += slen
+		elif ( sformat[i] == 'I' ):
+			gvar = struct.unpack("<I", data[pd:pd+4])
+			pd += 4
+		elif( sformat[i] <= '9' and sformat[i] >= '0'):
+			amount = amount*10 + (ord(sformat[i]) - 48);
+			needpack = False
+		elif ( sformat[i] == 's'):
+			gvar = struct.unpack("%ds" % amount, data[pd:pd+amount])
+			pd += amount;
+		if needpack:
+			t = t + gvar
+			amount = 0
+		i += 1
+	return t
+
 def process_data(data):
-	(strlen) = struct.unpack("I", data[:4])
-	print "strlen = %d" % strlen
-	format_string = "<I%dsI4sI4sIIII" % strlen
-	print format_string
-	# FIXME: refcount handling should be on server side
- 	(strlen, process_name, pid, srcip, sport, destip, dport, verdict, direction,refcnt) =  struct.unpack(format_string, data)
-#	print "I want to accept, pid='%d', process='%s', verdict='%d', direction='%s'" % (pid, process_name, verdict, dir_map[direction])
-	dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_INFO, gtk.BUTTONS_YES_NO, "The program: '%s', wants to reach internet, do you accept?" % process_name);
+	(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name) = phx_client_unpack("SI4sI4sIIIISS",data)
+	dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_INFO, gtk.BUTTONS_YES_NO, "The program: '%s'\n wants to reach internet\n '%s' -> '%s'\ndo you accept?" % (process_name, sz_name, dz_name) )
 	resp = dialog.run()
 	if (resp == gtk.RESPONSE_YES):
 		verdict = 1 # ACCEPTED
 	else:
 		verdict = 2 # DENIED
-	return struct.pack("<I%dsI4sI4sIIII" % strlen,strlen, process_name, pid, srcip, sport, destip, dport, verdict, direction, refcnt)
+	dialog.destroy()
+	return struct.pack("<III", verdict, srczone, destzone);
 	
 def gui_timer_callback(lsock):
 	pollobj = select.poll()

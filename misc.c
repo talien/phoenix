@@ -8,7 +8,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
-#include <strings.h>
+#include <string.h>
 
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
@@ -196,7 +196,7 @@ int parse_network(char* str, char* nw, int* mask)
 		if (str[i] == '\0')
 			return FALSE;
 		str[i] = '\0';
-		nw[i] = (char)atoi(str+prev);
+		nw[j] = (char)atoi(str+prev);
 		prev = i+1;
 	}
 	*mask = atoi(str+prev);

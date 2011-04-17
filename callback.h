@@ -21,7 +21,7 @@ int out_pending_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_dat
 int in_pending_cb(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 int phx_queue_callback(struct nfq_q_handle *qh,struct nfgenmsg *mfmsg,struct nfq_data *nfad,void* data);
 void phx_apptable_init();
-struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direction);
-void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict);
-
+struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direction, guint32 srczone, guint32 destzone);
+void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict, guint32 srczone, guint32 destzone);
+char* phx_apptable_serialize(int* length);
 #endif

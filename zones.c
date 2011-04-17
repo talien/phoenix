@@ -6,7 +6,7 @@
 
 #include <glib.h>
 
-char bin[8] = {1,2,4,8,16,32,64,128};
+guchar bin[8] = {1,2,4,8,16,32,64,128};
 
 radix_byte* radix_byte_new(int value, int needchild)
 {
@@ -20,7 +20,7 @@ radix_byte* radix_byte_new(int value, int needchild)
 	return result;
 }
 
-int zone_add(radix_bit* zone_tree, char* ip, int mask, int id)
+int zone_add(radix_bit* zone_tree, guchar* ip, int mask, int id)
 {
 	radix_bit* bit = zone_tree;
 	int bits = mask;
@@ -53,11 +53,12 @@ int zone_add(radix_bit* zone_tree, char* ip, int mask, int id)
 	return TRUE;
 }
 
-int zone_lookup(radix_bit* zone_tree, char* ip)
+int zone_lookup(radix_bit* zone_tree, guchar* ip)
 {
 	int level = 0;	
 	radix_bit *tree_item = zone_tree;
     int lastzone = 0;
+	log_debug("Looking up zone for ip: %u.%u.%u.%u \n", ip[0], ip[1], ip[2], ip[3]);
 	while (level < 32 && tree_item != NULL)
 	{
 		if (tree_item->zoneid != 0)
@@ -73,6 +74,7 @@ int zone_lookup(radix_bit* zone_tree, char* ip)
 		{
 			tree_item = tree_item->zero;
 		}
+		level++;
 	}
 	return lastzone;
 }

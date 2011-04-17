@@ -1,10 +1,16 @@
 #include "callback.h"
 #include "data.h"
 #include "types.h"
+#include "zones.h"
 
 GHashTable *apptable;
 
 GMutex *apptable_lock;
+
+
+//can we somehow avoid extern?
+extern radix_bit* zones;
+extern GString* zone_names[256];
 
 void phx_apptable_init()
 {
@@ -12,18 +18,28 @@ void phx_apptable_init()
 	apptable_lock = g_mutex_new();
 }
 
+guint32 phx_apptable_hash(guint32 direction, guint32 srczone, guint32 destzone)
+{
+    //FIXME: assert on srczone/dstzone > 256
+    //FIXME: pid handling -> hash should be guint64?
+	return ((srczone * 256) + destzone) * 4 + direction;
+}
+
 void
-phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict)
+phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, guint32 srczone, guint32 destzone)
 {
 	struct phx_app_rule *rule = g_new0(struct phx_app_rule, 1);
 
 	rule->appname = g_string_new(cdata->proc_name->str);
 	rule->pid = cdata->pid;
 	rule->verdict = verdict;
+	rule->srczone = srczone;
+	rule->destzone = destzone;
+	rule->direction = direction;
 	//guint hash = rule->pid * 4 + direction;
 	guint *hash = g_new0(guint, 1);
 
-	*hash = 0 * 4 + direction;
+	*hash = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
 	g_mutex_lock(apptable_lock);
 	GHashTable *chain =
 	    g_hash_table_lookup(apptable, cdata->proc_name->str);
@@ -62,7 +78,7 @@ int phx_chain_count_size(GHashTable* chain)
 	return result;
 }
 
-void phx_apptable_count_func(gpointer key, gpointer value, gpointer user_data)
+void phx_apptable_count_func(gpointer key G_GNUC_UNUSED, gpointer value, gpointer user_data)
 {
 	int *size = (int*) user_data;
 	(*size) += phx_chain_count_size((GHashTable*)value);
@@ -131,11 +147,11 @@ char* phx_apptable_serialize(int* length)
 }
 
 struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
-					 guint direction)
+					 guint direction, guint32 srczone, guint32 destzone)
 {
 	log_debug
-	    ("Looking for app in hashtable, app='%s', pid='%d', direction='%d'\n",
-	     appname->str, pid, direction);
+	    ("Looking for app in hashtable, app='%s', pid='%d', direction='%d', srczone='%d', destzone='%d' \n",
+	     appname->str, pid, direction, srczone, destzone);
 	g_mutex_lock(apptable_lock);
 	GHashTable *chain = g_hash_table_lookup(apptable, appname->str);
 
@@ -146,7 +162,7 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 		return NULL;
 	}
 	log_debug("Chain found, app='%s'\n", appname->str);
-	guint hash = 0 * 4 + direction;
+	guint32 hash = phx_apptable_hash(direction, srczone, destzone);
 
 	struct phx_app_rule *rule = g_hash_table_lookup(chain, &hash);
 
@@ -165,7 +181,7 @@ int
 phx_data_extract(unsigned char *payload, struct phx_conn_data *cdata,
 		 int direction)
 {
-	unsigned int headlen;
+	guint32 headlen;
 
 	headlen = (payload[0] % 16) * 4;
 	cdata->sport =
@@ -191,10 +207,10 @@ int phx_extract_nfq_pkt_data(struct nfq_data *nfad, int* id, char** payload)
 }
 
 
-int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
+int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UNUSED,
 	      struct nfq_data *nfad, void *data)
 {
-	int id, pkt_len, queue_num, direction, extr_res, pending = 0;
+	int id, pkt_len, queue_num, direction, extr_res, pending = 0, srczone, dstzone;
 	char* payload;
 	struct phx_conn_data *conndata;
 	struct phx_app_rule *rule;
@@ -224,11 +240,20 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 	if (extr_res == -1)
 	{
 		log_debug("Connection timeouted, dropping packet\n");
+		phx_conn_data_unref(conndata);
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
 				       payload);
 	}
+	//zone lookup
+	srczone = zone_lookup(zones, conndata->srcip);
+	dstzone = zone_lookup(zones, conndata->destip);
 
-	rule = phx_apptable_lookup(conndata->proc_name, conndata->pid, direction);
+	conndata->srczone = srczone;
+	conndata->destzone = dstzone;
+
+	log_debug("Connection zone lookup finished, srczone='%s', dstzone='%s'\n", zone_names[srczone]->str, zone_names[dstzone]->str);
+
+	rule = phx_apptable_lookup(conndata->proc_name, conndata->pid, direction, srczone, dstzone);
 	if (rule)
 	{
 		log_debug("Rule found for program\n");
@@ -255,7 +280,6 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 		}
 		if (rule->verdict == DENY_CONN)
 		{
-			log_debug("%d\n", conndata->proc_name);
 			log_debug
 			    ("Program %s found in list, denying for this time\n",
 			     conndata->proc_name->str);
@@ -291,7 +315,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg,
 			// no rule in non-pending queue, creating one and pushing to queue
 			log_debug("No rule found, inserting a new one for program, program='%s'\n",conndata->proc_name->str);
 			phx_conn_data_ref(conndata);
-			phx_apptable_insert(conndata, direction, NEW);
+			phx_apptable_insert(conndata, direction, NEW, srczone, dstzone);
 			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
 			//sending to pending queue
