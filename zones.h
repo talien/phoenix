@@ -22,6 +22,6 @@ typedef struct radix_bit
 
 
 int zone_lookup(radix_bit* zone_tree, guchar* ip);
-int zone_add(radix_bit* zone_tree, guchar* ip, int mask, int id);
+int zone_add(radix_bit* zone_tree, guchar* ip, guint32 mask, int id);
 radix_byte* radix_byte_new(int value, int needchild);
 #endif

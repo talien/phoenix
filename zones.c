@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <glib.h>
+#include "misc.h"
 
 guchar bin[8] = {1,2,4,8,16,32,64,128};
 
@@ -20,7 +21,7 @@ radix_byte* radix_byte_new(int value, int needchild)
 	return result;
 }
 
-int zone_add(radix_bit* zone_tree, guchar* ip, int mask, int id)
+int zone_add(radix_bit* zone_tree, guchar* ip, guint32 mask, int id)
 {
 	radix_bit* bit = zone_tree;
 	int bits = mask;

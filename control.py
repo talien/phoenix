@@ -11,8 +11,8 @@ class Rule:
 
 def parse_rule(data, position):
 	print "Data: %r, position:%d" % (data,position)
-	(pid,verdict,strlen) = struct.unpack("III",data[position:position+12])
-	position += 12
+	(pid,verdict,srczone,destzone,strlen) = struct.unpack("IIIII",data[position:position+20])
+	position += 20
 	(appname,) = struct.unpack("<%ds" % strlen,data[position:position+strlen])
 	position += strlen
 	return (appname, position, Rule(pid, verdict,appname))
@@ -47,7 +47,7 @@ def parse_apptable(data):
 def populate_liststore(liststore, apptable):
 	for name,chain in apptable.iteritems():
 		for direction,rule in chain.iteritems():
-			liststore.append((name, direction, rule.pid, rule.verdict))
+			liststore.append((name, direction%4, rule.pid, rule.verdict))
 
 class MainWindow(gtk.Window):
 	def __init__(self,apptable):

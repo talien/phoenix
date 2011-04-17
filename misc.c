@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <string.h>
+#include <stdlib.h>
 
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
@@ -64,9 +65,9 @@ write_ip (unsigned char *buffer)
 }
 
 void
-swrite_ip (unsigned char *buffer, char *out, int buflen)
+swrite_ip (char *buffer, char *out)
 {
-    sprintf (out, "%d.%d.%d.%d", buffer[0], buffer[1], buffer[2], buffer[3]);
+    sprintf (out, "%d.%d.%d.%d", (guchar)buffer[0], (guchar)buffer[1], (guchar)buffer[2], (guchar)buffer[3]);
 }
 
 GString *
@@ -75,7 +76,7 @@ phx_write_ip (char ip[4])
     char ipbuf[20];
 
     memset ((void*)ipbuf, 0, sizeof (ipbuf));
-    swrite_ip (ip, ipbuf, 0);
+    swrite_ip (ip, ipbuf);
     return g_string_new (ipbuf);
 }
 
@@ -160,7 +161,7 @@ get_user (guint32 pid)
 //  printf("uid: %d\n",uid);
     struct passwd *pass = getpwuid (uid);
 
-    close (statf);
+    fclose (statf);
     return g_string_new (pass->pw_name);
 }
 
@@ -178,14 +179,14 @@ phx_dns_lookup (char ip[4])
     char hbuf[1024];
 
     g_string_free (destip, TRUE);
-    if (getnameinfo (&sa, sizeof (struct sockaddr), hbuf, sizeof (hbuf),
+    if (getnameinfo ((struct sockaddr*)&sa, sizeof (struct sockaddr), hbuf, sizeof (hbuf),
 		     NULL, 0, 8))
 		return NULL;
     else
 		return g_string_new (hbuf);
 }
 
-int parse_network(char* str, char* nw, int* mask)
+int parse_network(char* str, guchar* nw, guint32* mask)
 {
     int i, j, prev = 0;
 	char endch = '.';

@@ -2,6 +2,7 @@
 #include "data.h"
 #include "types.h"
 #include "zones.h"
+#include "serialize.h"
 
 GHashTable *apptable;
 
@@ -56,25 +57,29 @@ phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, gui
 	g_mutex_unlock(apptable_lock);
 };
 
-int phx_rule_count_size(struct phx_app_rule* rule)
+void phx_rule_count_size(gpointer key G_GNUC_UNUSED, gpointer value, gpointer user_data)
 {
-	//pid:int, verdict:int, string_size:int, strng: char*)
-	return 12+rule->appname->len;
+	//hash: int, pid:int, verdict:int, string_size:int, strng: char*, int srczone, int destzone
+	struct phx_app_rule* rule = (struct phx_app_rule*) value;
+	int* size = (int*) user_data;
+	(*size) += 24 + rule->appname->len;
 }
 
 int phx_chain_count_size(GHashTable* chain)
 {
 	//number of directions: int
 	int result = 4;
-	struct phx_app_rule* rule;
-	int i;
-	for (i=0; i<=1; i++)
+//	struct phx_app_rule* rule;
+//	int i;
+	/*for (i=0; i<=1; i++)
 	{
 		// hash value: int, rule size:variable
 		rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
 		if (rule != NULL)
 			result += 4 + phx_rule_count_size(rule);
-	}
+	}*/
+	g_hash_table_foreach(chain, phx_rule_count_size, &result);
+	log_debug("Chain size counted, size='%d'\n", result);
 	return result;
 }
 
@@ -94,32 +99,40 @@ int phx_apptable_count_size(GHashTable* apptable)
 
 int phx_rule_serialize(struct phx_app_rule* rule, char* buffer)
 {
-	int len = rule->appname->len;
-	memcpy(buffer, &(rule->pid), sizeof(rule->pid));
+//	int len = rule->appname->len;
+	/*memcpy(buffer, &(rule->pid), sizeof(rule->pid));
 	memcpy(buffer+4, &(rule->verdict), sizeof(rule->verdict));
 	memcpy(buffer+8, &len, sizeof(len));
-	memcpy(buffer+12, rule->appname->str, len);
-	return 12 + len;
+	memcpy(buffer+12, rule->appname->str, len);*/
+	int size = phx_pack_data("iiiiS", buffer, &(rule->pid), &(rule->verdict), &(rule->srczone), &(rule->destzone), rule->appname, NULL);
+	log_debug("Rule serialized, size='%d, program='%s'\n",size,rule->appname->str);
+	return size;
 }
 
 int phx_chain_serialize(GHashTable* chain, char* buffer)
 {
 	int dir_num = g_hash_table_size(chain);
 	// hash numbers: int
-	memcpy(buffer,&dir_num, sizeof(dir_num));
+	log_debug("Serializing chain, entry number='%d'\n", dir_num);
 	struct phx_app_rule* rule;
 	int position = 4, i;
-    for (i=0; i<=1; i++)
+	GList* values = g_hash_table_get_values(chain);
+	memcpy(buffer,&dir_num, sizeof(dir_num));
+    while (values)
     {
         // hash value: int, rule size:variable
-        rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
+        /*rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
 		if (rule != NULL)
 		{
-			memcpy(buffer+position, &i, sizeof(i));
-			position += 4 + phx_rule_serialize(rule, buffer+position+4);
-			
-		}
+						
+		}*/
+		rule = (struct phx_app_rule*) values->data;
+		i = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
+		memcpy(buffer+position, &i, sizeof(i));
+		position += 4 + phx_rule_serialize(rule, buffer+position+4);
+		values = values->next;
     }
+	log_debug("Chain serialized, size='%d'\n", position);
 	return position;
 }
 
@@ -133,6 +146,7 @@ char* phx_apptable_serialize(int* length)
 	GList* values = g_hash_table_get_values(apptable);
 	//chain num: int, chains: variable
 	memcpy(result, &chains_num, sizeof(chains_num));
+	log_debug("Serializing apptable, num_chains='%d', expected_length='%d'\n",chains_num, table_size);
 	while (values)
 	{
 		position += phx_chain_serialize((GHashTable*) values->data, result+position);
@@ -178,7 +192,7 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 }
 
 int
-phx_data_extract(unsigned char *payload, struct phx_conn_data *cdata,
+phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 		 int direction)
 {
 	guint32 headlen;
@@ -190,8 +204,8 @@ phx_data_extract(unsigned char *payload, struct phx_conn_data *cdata,
 	cdata->dport =
 	    (unsigned char)payload[headlen + 2] * 256 +
 	    (unsigned char)payload[headlen + 3];
-	strncpy(cdata->destip, payload + 16, 4);
-	strncpy(cdata->srcip, payload + 12, 4);
+	strncpy((char*)cdata->destip, (char*)payload + 16, 4);
+	strncpy((char*)cdata->srcip, (char*)payload + 12, 4);
 	cdata->direction = direction;
 	return get_proc_from_conn(cdata, direction);
 }
@@ -242,7 +256,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		log_debug("Connection timeouted, dropping packet\n");
 		phx_conn_data_unref(conndata);
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
-				       payload);
+				       (guchar*)payload);
 	}
 	//zone lookup
 	srczone = zone_lookup(zones, conndata->srcip);
@@ -343,6 +357,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 	else
 	{
 		if (nfq_verdict == NF_REPEAT)
+		{
 			if (direction == INBOUND)
 			{
 				in_pending_count++;
@@ -351,17 +366,18 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			{
 				pending_conn_count++;
 			}
+		}
 		
 	}
 
 	if (mark != 0)
 	{
 		return nfq_set_verdict_mark(qh, id, nfq_verdict, htonl(mark),
-				    pkt_len, payload);
+				    pkt_len, (guchar*)payload);
 	}
 	else
 	{
-		return nfq_set_verdict(qh, id, nfq_verdict, pkt_len, payload);
+		return nfq_set_verdict(qh, id, nfq_verdict, pkt_len, (guchar*)payload);
 	}
 
 }

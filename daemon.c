@@ -149,19 +149,26 @@ int parse_section(const char* line, char* section)
 
 }
 
-void parse_config()
+void parse_config(const char* filename)
 {
 	char fbuf[512], var1[128], var2[128];
 
 	struct phx_conn_data *rule = 0;
-
-	FILE *conffile = fopen("phx.conf", "r");
-
 	int verdict, direction = OUTBOUND;
 	int state = 0;
 	int zoneid = 1;
-	char buf[4];
-	guint32 mask;
+	guchar buf[4];
+	guint32 mask;	
+	FILE* conffile;
+
+	if (filename == NULL)
+	{
+		conffile = fopen("phx.conf", "r");
+	}
+	else
+	{
+		conffile = fopen(filename, "r");
+	}
 
 	zones = g_new0(radix_bit, 1);
 
@@ -230,7 +237,7 @@ void parse_config()
 		log_debug("Inserting rule\n");
 		phx_apptable_insert(rule, direction, verdict, 0, 0);
 	}
-	close(conffile);
+	fclose(conffile);
 }
 
 int init_daemon_socket()
@@ -263,7 +270,6 @@ void control_handle_query(int sock)
 	char* buffer;
 	char command[4096];
 	int data_len = 0;
-	int daemon_socket = init_daemon_socket();
 
 	int hs_len = recv(sock, command, 1024, 0);
 	log_debug("Data got: length='%d', data='%s'\n", hs_len, command);
@@ -283,14 +289,17 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 
 	struct sockaddr_un remote;
 
-	int remote_sock, rsock_len;
+	int remote_sock, daemon_socket;
+	socklen_t rsock_len;
+	daemon_socket = init_daemon_socket();
 	log_debug("Starting daemon control socket thread\n");
 	while (1)
 	{
-		remote_sock = accept(daemon_socket, &remote, &rsock_len);
+		remote_sock = accept(daemon_socket, (struct sockaddr*)&remote, &rsock_len);
 		log_debug("Connection accepted, handling data\n");
 		control_handle_query(remote_sock);
 	};
+	close(daemon_socket);
 }
 
 struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
@@ -355,23 +364,6 @@ void signal_pending()
 	g_cond_signal(pending_cond);
 }
 
-
-
-gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
-{
-	g_async_queue_ref(to_gui);
-	while (1)
-	{
-		log_debug("Waiting for data in gui_ipc_thread\n");
-		struct phx_conn_data *data = g_async_queue_pop(to_gui);
-
-		struct phx_conn_data *newdata = send_conn_data(data);
-
-		log_debug("Starting to process gui queue\n");
-		process_gui_queue(data)
-	}
-}
-
 int process_gui_queue(struct phx_conn_data* resdata)
 {
 	struct phx_app_rule *rule;
@@ -406,6 +398,22 @@ int process_gui_queue(struct phx_conn_data* resdata)
 	} else
 	{
 		return 0;
+	}
+}
+
+
+gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
+{
+	g_async_queue_ref(to_gui);
+	while (1)
+	{
+		log_debug("Waiting for data in gui_ipc_thread\n");
+		struct phx_conn_data *data = g_async_queue_pop(to_gui);
+
+		send_conn_data(data);
+
+		log_debug("Starting to process gui queue\n");
+		process_gui_queue(data);
 	}
 }
 
@@ -574,7 +582,7 @@ void close_queue(struct nfq_handle *handle, struct nfq_q_handle *qhandle)
 
 int end = 0;
 
-void signal_quit(int signum)
+void signal_quit(int signum G_GNUC_UNUSED)
 {
 	end = 1;    
 };
@@ -598,7 +606,15 @@ int main(int argc, char **argv)
 	to_gui = g_async_queue_new();
 
 	phx_apptable_init();
-	parse_config();
+
+	if (argc == 2)
+	{
+		parse_config(argv[1]);
+	}
+	else
+	{
+		parse_config(NULL);
+	}
 
 	log_debug("Starting threads\n");
 
@@ -612,9 +628,7 @@ int main(int argc, char **argv)
 		timer_callback(NULL);
 		sleep(0);
 	};
-
-	close(daemon_socket);
-
+	
 	log_debug("Closing netlink connections\n");
 
 	close_queue(out_handle, out_qhandle);
@@ -625,7 +639,6 @@ int main(int argc, char **argv)
 	log_debug("Thread exited!\n");
 
 	g_async_queue_unref(to_gui);
-	g_async_queue_unref(to_daemon);
 
 	return 0;
 
