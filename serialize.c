@@ -66,6 +66,51 @@ int phx_pack_data(const char* format, char* buffer, ...)
 	return buffer_pointer;
 }
 
+int phx_unpack_data(const char* format, char* buffer, ...)
+{
+	va_list ap;	
+	guint32 format_pointer = 0, buffer_pointer = 0, len, amount;
+	GString* str;
+	gboolean newarg;
+	va_start(ap, buffer);
+	void* arg = va_arg(ap, void*);
+	amount = 0;
+	while (arg != NULL)
+	{
+		newarg = TRUE;
+		switch(format[format_pointer])
+		{
+			case 'S': str = (GString*) arg;
+					  len = *((guint32*)(buffer+buffer_pointer));
+					  buffer_pointer += sizeof(guint32);
+					  g_string_assign(str, "");
+					  g_string_append_len(str, buffer+buffer_pointer, len);
+					  buffer_pointer += len;
+					  break;
+
+			case 'i': *(int*)arg = *((guint32*)(buffer+buffer_pointer));
+					  buffer_pointer += sizeof(guint32);
+					  break;
+
+			case '0'...'9': amount = amount * 10 + (format[format_pointer]-48);
+					  newarg = FALSE;
+					  break;
+
+			case 'c': memcpy(arg, buffer+buffer_pointer, amount);
+					  buffer_pointer += amount;
+					  amount = 0;
+					  break;
+					
+		}
+		if (newarg)
+			arg = va_arg(ap, void*);
+		format_pointer++;
+	}
+	va_end(ap);
+	return buffer_pointer;
+
+};
+
 int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
 {
 	int size1 = 0, size2 = 0, size3 = 0;
@@ -104,7 +149,4 @@ int phx_serialize_zones(char* buffer, radix_bit* zones)
 	return buffer_length;
 }
 
-/*int phx_unpack_data(const char* format, char* buffer, ...)
-{
-	va_list ap;	
-};*/
+
