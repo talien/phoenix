@@ -201,7 +201,12 @@ int parse_config(const char* filename)
 				state = PHX_STATE_ZONE;
 			}	
 		}
-		else
+		else if (get_first_char(fbuf) == '#')
+		{
+			log_debug("Comment found\n");
+			continue;
+		}
+		else 
 		{
 			parse_key_value(fbuf, var1, var2);
 			log_debug("Variable1: %s Variable2:%s state='%d' \n", var1, var2, state);
