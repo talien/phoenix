@@ -149,7 +149,7 @@ int parse_section(const char* line, char* section)
 
 }
 
-void parse_config(const char* filename)
+int parse_config(const char* filename)
 {
 	char fbuf[512], var1[128], var2[128];
 
@@ -171,6 +171,8 @@ void parse_config(const char* filename)
 	}
 
 	zones = g_new0(radix_bit, 1);
+	if (!conffile)
+		return FALSE;
 
 	while (fgets(fbuf, sizeof(fbuf), conffile) != NULL)
 	{
@@ -238,6 +240,7 @@ void parse_config(const char* filename)
 		phx_apptable_insert(rule, direction, verdict, 0, 0);
 	}
 	fclose(conffile);
+	return TRUE;
 }
 
 int init_daemon_socket()
@@ -607,13 +610,10 @@ int main(int argc, char **argv)
 
 	phx_apptable_init();
 
-	if (argc == 2)
+	if (!parse_config((argc == 2) ? argv[1] : NULL))
 	{
-		parse_config(argv[1]);
-	}
-	else
-	{
-		parse_config(NULL);
+		log_debug("Error occured during parsing config, exiting!\n");
+		goto exit;
 	}
 
 	log_debug("Starting threads\n");
@@ -628,7 +628,9 @@ int main(int argc, char **argv)
 		timer_callback(NULL);
 		sleep(0);
 	};
-	
+
+exit:
+
 	log_debug("Closing netlink connections\n");
 
 	close_queue(out_handle, out_qhandle);
