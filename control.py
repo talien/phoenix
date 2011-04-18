@@ -4,10 +4,12 @@ import os,sys,socket, struct
 import gtk
 
 class Rule:
-	def __init__(self, pid, verdict, appname):
+	def __init__(self, pid, verdict, appname, source_zone, dest_zone):
 		self.pid = pid
 		self.verdict = verdict
 		self.appname = appname
+		self.source_zone = source_zone
+		self.dest_zone = dest_zone
 
 def phx_client_unpack(sformat, data):
     i = 0
@@ -36,16 +38,16 @@ def phx_client_unpack(sformat, data):
         i += 1
     return t
 
-def parse_rule(data, position):
+def parse_rule(data, position, zones):
 	print "Data: %r, position:%d" % (data,position)
 	(pid,verdict,srczone,destzone,strlen) = struct.unpack("IIIII",data[position:position+20])
 	position += 20
 	(appname,) = struct.unpack("<%ds" % strlen,data[position:position+strlen])
 	position += strlen
-	return (appname, position, Rule(pid, verdict,appname))
+	return (appname, position, Rule(pid, verdict, appname, zones[srczone][0], zones[destzone][0]))
 	
 
-def parse_chain(data, position):
+def parse_chain(data, position, zones):
 	print "Parsing chain, position='%d'" % position
 	(hashes,) = struct.unpack("I",data[position:position+4])
 	position = position + 4
@@ -54,19 +56,19 @@ def parse_chain(data, position):
 	for i in range(0,hashes):
 		(hash_value,) = struct.unpack("I",data[position:position+4])
 		position = position + 4
-		(appname, position, rule) = parse_rule(data,position)
+		(appname, position, rule) = parse_rule(data,position, zones)
 		chain[hash_value] = rule
 	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
 	return (appname, position, chain)
 
-def parse_apptable(data):
+def parse_apptable(data, zones):
 	position = 0;
 	(chains,) = struct.unpack("I",data[position:position+4])
 	print "chain number='%d'" % chains
 	apptable = {}
 	position += 4
 	for i in range (0,chains):
-		(appname, position, chain) = parse_chain(data,position)
+		(appname, position, chain) = parse_chain(data,position, zones)
 		print "Position after parse:position='%d'" % position
 		apptable[appname] = chain
 	return apptable
@@ -74,6 +76,7 @@ def parse_apptable(data):
 def parse_zones(data):
 	position = 0
 	zones = {}
+	zones[0] = ("*","0.0.0.0/0")
 	while position < len(data):
 		(zlen,) = struct.unpack("<I", data[position:position+4])
 		print "Unpacking zone, len='%d', position='%d'" % (zlen, position)
@@ -85,12 +88,13 @@ def parse_zones(data):
 
 def populate_zone_store(liststore, zones):
 	for zoneid, (zonename, network) in zones.iteritems():
-		liststore.append((zoneid, zonename, network))
+		if zoneid != 0:
+			liststore.append((zoneid, zonename, network))
 
 def populate_liststore(liststore, apptable):
 	for name,chain in apptable.iteritems():
 		for direction,rule in chain.iteritems():
-			liststore.append((name, direction%4, rule.pid, rule.verdict))
+			liststore.append((name, direction%4, rule.pid, rule.verdict,rule.source_zone, rule.dest_zone))
 
 def send_command(command, cdata = None):
 	s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -114,7 +118,7 @@ class MainWindow(gtk.Window):
 
 	def __init__(self,apptable,zones):
 		gtk.Window.__init__(self)
-		liststore = gtk.ListStore(str, int, int,int)
+		liststore = gtk.ListStore(str, int, int,int, str, str)
 		zonestore = gtk.ListStore(int, str, str)
 		populate_liststore(liststore, apptable)
 		populate_zone_store(zonestore, zones)
@@ -127,6 +131,8 @@ class MainWindow(gtk.Window):
 		create_cell(treeview, "Direction", 1)
 		create_cell(treeview, "Pid", 2)
 		create_cell(treeview, "Verdict", 3)
+		create_cell(treeview, "Source zone", 4)
+		create_cell(treeview, "Destination zone", 5)
 
 		create_cell(zoneview, "Zone ID", 0)
 		create_cell(zoneview, "Zone name", 1)
@@ -147,10 +153,10 @@ class MainWindow(gtk.Window):
 		return False
 	
 def main():
-	data = send_command("GET");
-	apptable = parse_apptable(data);
 	data = send_command("GZN");
 	zones = parse_zones(data)
+	data = send_command("GET");
+	apptable = parse_apptable(data, zones);
 	window = MainWindow(apptable, zones)
 	gtk.main()
 	
