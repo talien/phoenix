@@ -288,6 +288,14 @@ void control_handle_query(int sock)
 		send(sock, buffer, data_len, 0);
 		free(buffer);
 	}
+	else if (!strncmp(command,"GZN",7))
+	{
+		buffer = g_new(char,8192);
+		data_len = phx_serialize_zones(buffer, zones);
+		log_debug("Get zone request received, sending zones, size='%d'\n", data_len);
+		send(sock, buffer, data_len, 0);
+		g_free(buffer);
+	}
 	close(sock);
 	
 }

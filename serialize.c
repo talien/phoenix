@@ -84,14 +84,16 @@ int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
 			log_debug("Zone found at depth %d, zone_id='%d', ip='%d.%d.%d.%d'\n", level + 1, zones->zoneid,(guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3]);
 			network = g_string_new("");
 			g_string_printf(network, "%d.%d.%d.%d/%d", (guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3], level + 1);
-			size3 = phx_pack_data("SiS",buffer+size1+size2,zone_names[zones->zoneid], &zones->zoneid, network, NULL);
+			size3 = phx_pack_data("SiS",buffer+size1+size2+4,zone_names[zones->zoneid], &zones->zoneid, network, NULL);
+			phx_pack_data("i",buffer+size1+size2, &size3, NULL);
+			size3 += 4;
 			g_string_free(network, TRUE);
 		}
 	}
 	return size1 + size2 + size3;
 }
 
-void phx_serialize_zones(char* buffer, radix_bit* zones)
+int phx_serialize_zones(char* buffer, radix_bit* zones)
 {
 	radix_bit* zone = zones;
 	int buffer_length;
@@ -99,6 +101,7 @@ void phx_serialize_zones(char* buffer, radix_bit* zones)
 	buffer_length = phx_rec_zone(buffer, zones, ip, -1);
 	log_debug("Zones serialized, length = '%d'\n", buffer_length);
 	g_free(ip);
+	return buffer_length;
 }
 
 /*int phx_unpack_data(const char* format, char* buffer, ...)
