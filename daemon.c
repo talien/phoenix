@@ -366,7 +366,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 		perror("Error receiving from GUI IPC socket\n");
 	}
 	log_debug("Got data from GUI on IPC, len:%d\n", recvd);
-	phx_deserialize_data2(phx_buf, &verdict, &srczone, &destzone);
+	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone);
 	data->state = verdict;
 	data->srczone = srczone;
 	data->destzone = destzone;
