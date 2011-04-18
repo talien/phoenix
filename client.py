@@ -60,7 +60,8 @@ def gui_timer_callback(lsock):
 
 def setup_socket():
 	sock_name = "phxsock-" + getpass.getuser()
-	os.unlink(sock_name)
+	if (os.path.exists(sock_name)):
+		os.unlink(sock_name)
 	listen_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 	listen_sock.bind(sock_name)
 	listen_sock.listen(5)
