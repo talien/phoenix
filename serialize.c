@@ -2,8 +2,10 @@
 #include "serialize.h"
 #include <string.h>
 #include "misc.h"
+#include "zones.h"
 
 extern GString* zone_names[256];
+extern guchar bin[8];
 
 int
 phx_serialize_data (struct phx_conn_data *data, char *buffer)
@@ -62,6 +64,41 @@ int phx_pack_data(const char* format, char* buffer, ...)
 	}
 	va_end(ap);
 	return buffer_pointer;
+}
+
+int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
+{
+	int size1 = 0, size2 = 0, size3 = 0;
+	GString* network;
+	if (zones != NULL)
+	{
+		level = level + 1;
+		ip[level / 8] = ip[level / 8] & ~bin[7 - (level % 8)];
+		size1 = phx_rec_zone(buffer, zones->zero, ip, level);
+		ip[level / 8] = ip[level / 8] | bin[7 - (level % 8)];
+		size2 = phx_rec_zone(buffer+size1, zones->one, ip, level);
+		ip[level / 8] = ip[level / 8] & ~bin[7 - level % 8];
+		level = level - 1;
+		if (zones->zoneid != 0)
+		{
+			log_debug("Zone found at depth %d, zone_id='%d', ip='%d.%d.%d.%d'\n", level + 1, zones->zoneid,(guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3]);
+			network = g_string_new("");
+			g_string_printf(network, "%d.%d.%d.%d/%d", (guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3], level + 1);
+			size3 = phx_pack_data("SiS",buffer+size1+size2,zone_names[zones->zoneid], &zones->zoneid, network, NULL);
+			g_string_free(network, TRUE);
+		}
+	}
+	return size1 + size2 + size3;
+}
+
+void phx_serialize_zones(char* buffer, radix_bit* zones)
+{
+	radix_bit* zone = zones;
+	int buffer_length;
+	char* ip = g_new0(char,4);
+	buffer_length = phx_rec_zone(buffer, zones, ip, -1);
+	log_debug("Zones serialized, length = '%d'\n", buffer_length);
+	g_free(ip);
 }
 
 /*int phx_unpack_data(const char* format, char* buffer, ...)

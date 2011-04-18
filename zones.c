@@ -35,6 +35,7 @@ int zone_add(radix_bit* zone_tree, guchar* ip, guint32 mask, int id)
 			{
 				bit->one = g_new0(radix_bit,1);
 				bit->one->bit = 1;
+				bit->one->parent = bit;
 			}
 			bit = bit->one;
 		}
@@ -45,6 +46,7 @@ int zone_add(radix_bit* zone_tree, guchar* ip, guint32 mask, int id)
 			{
 				bit->zero = g_new0(radix_bit,1);
 				bit->zero->bit = 0;
+				bit->zero->parent = bit;
 			}
 			bit = bit->zero;
 		}

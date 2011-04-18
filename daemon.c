@@ -597,6 +597,7 @@ void signal_quit(int signum G_GNUC_UNUSED)
 
 int main(int argc, char **argv)
 {
+
 	log_debug("Opening netlink connections\n");
 
 	init_queue(&in_handle, &in_qhandle, &in_fd, phx_queue_callback, 1);
