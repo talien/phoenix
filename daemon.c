@@ -329,7 +329,9 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 
 	if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
 	{
-		exit(1);
+		log_debug("Error creating socket to client\n");
+		data->state = DENY_CONN;
+		return data;
 	}
 	log_debug("Connecting to GUI socket\n");
 	remote.sun_family = AF_UNIX;
@@ -349,21 +351,26 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 			  uname->str);
 
 		data->state = DENY_CONN;
+		close(s);
 		return data;
 	}
 	log_debug("Sending %d bytes of data to GUI\n", dlen);
 	if (send(s, phx_buf, dlen, 0) == -1)
 	{
-		perror("send");
+		log_debug("Error sending to GUI IPC socket\n");
 
 		data->state = DENY_CONN;
+		close(s);
 		return data;
 	}
 	int recvd;
 
-	if ((recvd = recv(s, phx_buf, sizeof(phx_buf), 0)) == -1)
+	if ((recvd = recv(s, phx_buf, sizeof(phx_buf), 0)) <= 0)
 	{
-		perror("Error receiving from GUI IPC socket\n");
+		log_debug("Error receiving from GUI IPC socket\n");
+		data->state = DENY_CONN;
+		close(s);
+		return data;
 	}
 	log_debug("Got data from GUI on IPC, len:%d\n", recvd);
 	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone);
