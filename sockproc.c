@@ -188,6 +188,7 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
 		pnlen = readlink (fname, procname, sizeof (procname));
 		procname[pnlen] = '\0';
 		c->proc_name = g_string_new (procname);
+		fclose(tcp);
 		return pnlen + 1;
 	    }
 	}
@@ -206,6 +207,7 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
 			pnlen = readlink (fname, procname, sizeof (procname));
 			procname[pnlen] = '\0';
 			c->proc_name = g_string_new (procname);
+			fclose(tcp);
 			return pnlen + 1;
 	    }
 	}
@@ -248,6 +250,7 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
 		pnlen = readlink (fname, procname, sizeof (procname));
 		procname[pnlen] = '\0';
 		c->proc_name = g_string_new (procname);
+		fclose(tcp);
 		return pnlen + 1;
 	    }
 	}
@@ -267,6 +270,7 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
 		pnlen = readlink (fname, procname, sizeof (procname));
 		procname[pnlen] = '\0';
 		c->proc_name = g_string_new (procname);
+		fclose(tcp);
 		return pnlen + 1;
 	    }
 	}
