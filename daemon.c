@@ -368,6 +368,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	}
 	else
 	{
+		aname = g_string_new(aname->str);
 		log_debug("Resolving user alias from %s to %s\n", uname->str, aname->str);
 		g_string_free(uname, TRUE);
 		uname = g_string_prepend(aname, "phxsock-");
