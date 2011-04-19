@@ -267,6 +267,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 
 	log_debug("Connection zone lookup finished, srczone='%s', dstzone='%s'\n", zone_names[srczone]->str, zone_names[dstzone]->str);
 
+	//rule lookup
 	rule = phx_apptable_lookup(conndata->proc_name, conndata->pid, direction, srczone, dstzone);
 	if (rule)
 	{
@@ -281,7 +282,15 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		{
 			log_debug("Program %s found in list, denying\n",
 				  conndata->proc_name->str);
-			nfq_verdict = NF_DROP;
+			if (direction == OUTBOUND)
+			{
+				nfq_verdict = NF_REPEAT;
+				mark = 0x3;
+			}
+			else
+			{
+				nfq_verdict = NF_DROP;
+			}
 		}
 		if (rule->verdict == ASK)
 		{
@@ -299,7 +308,15 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			     conndata->proc_name->str);
 			pending_conn_count--;
 			rule->verdict = ASK;
-			nfq_verdict = NF_DROP;
+			if (direction == OUTBOUND)
+			{
+				nfq_verdict = NF_REPEAT;
+				mark = 0x3;
+			}
+			else
+			{
+				nfq_verdict = NF_DROP;
+			}
 		}
 		if (rule->verdict == NEW)
 		{

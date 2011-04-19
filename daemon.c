@@ -48,8 +48,11 @@ GMutex *cond_mutex;
 
 radix_bit *zones;
 
+GHashTable* aliases;
+
 #define PHX_STATE_RULE 1
 #define PHX_STATE_ZONE 2
+#define PHX_STATE_ALIAS 3
 
 char get_first_char(const char* line)
 {
@@ -160,6 +163,7 @@ int parse_config(const char* filename)
 	guchar buf[4];
 	guint32 mask;	
 	FILE* conffile;
+	aliases = g_hash_table_new(g_string_hash, g_string_equal);
 
 	if (filename == NULL)
 	{
@@ -180,30 +184,34 @@ int parse_config(const char* filename)
 		{
 			parse_section(fbuf, var1);
 			log_debug("Conf section: section='%s'\n", var1);
+			if (rule)
+			{
+				log_debug("Inserting rule\n");
+				phx_apptable_insert(rule, direction, verdict, 0, 0);
+			}
 			if (!strncmp(var1, "rule", 128))
 			{
-				if (rule)
-				{
-					log_debug("Inserting rule\n");
-					phx_apptable_insert(rule, direction, verdict, 0, 0);
-				}
 				rule = g_new0(struct phx_conn_data, 1);
 				state = PHX_STATE_RULE;
 			}
 			if (!strncmp(var1, "zones", 128))
 			{
-				if (rule)
-				{
-					log_debug("Inserting rule\n");
-					phx_apptable_insert(rule, direction, verdict, 0, 0);
-				}
 				rule = NULL;
 				state = PHX_STATE_ZONE;
 			}	
+			if (!strncmp(var1, "alias", 128))
+			{
+				rule = NULL;
+				state = PHX_STATE_ALIAS;	
+			}
 		}
 		else if (get_first_char(fbuf) == '#')
 		{
 			log_debug("Comment found\n");
+			continue;
+		}
+		else if (get_first_char(fbuf) == '\0')
+		{
 			continue;
 		}
 		else 
@@ -236,6 +244,14 @@ int parse_config(const char* filename)
 				zone_add(zones, buf, mask, zoneid);
 				zone_names[zoneid] = g_string_new(var1);
 				zoneid += 1;
+			}
+			else if (state == PHX_STATE_ALIAS)
+			{
+				log_debug("Adding alias: name='%s', alias='%s' \n",var1, var2);
+				GString *name, *alias;
+				name = g_string_new(var1);
+				alias = g_string_new(var2);
+				g_hash_table_insert(aliases, name, alias);
 			}
 		}
 	}
@@ -336,14 +352,28 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	log_debug("Connecting to GUI socket\n");
 	remote.sun_family = AF_UNIX;
 	GString *uname = get_user(data->pid);
+	GString *aname;
 
 	if (uname == NULL)
 	{
 		log_debug("Cannot determine process user, assuming root\n");
 		uname = g_string_new("root");
 	}
-	uname = g_string_prepend(uname, "phxsock-");
+
+	//lookup username in aliases
+	aname = g_hash_table_lookup(aliases, uname);
+	if (aname == NULL)
+	{
+		uname = g_string_prepend(uname, "phxsock-");
+	}
+	else
+	{
+		log_debug("Resolving user alias from %s to %s\n", uname->str, aname->str);
+		g_string_free(uname, TRUE);
+		uname = g_string_prepend(aname, "phxsock-");
+	}
 	strcpy(remote.sun_path, uname->str);
+	g_string_free(uname, TRUE);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1)
 	{
