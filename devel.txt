@@ -58,8 +58,8 @@ TODO:
  - Vuze tesztelés, tcp6 connection timeoutok megnézése jobban
  - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
 	- daemon-client modell után, client feladata FÉLIG KÉSZ
- - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan
-  - ICMP reject mark alapján szétválogatni,.
+ - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan KÉSZ
+  - ICMP reject mark alapján szétválogatni,. KÉSZ
  - eventlog - vagy vmilyen logging modell.
  - daemon-client modell KÉSZ
  - zónázás KÉSZ
@@ -70,7 +70,9 @@ TODO:
    a /proc-ban, akkor törölni. Túl nagy falat, legvégén, ha lesz idő
  - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás? -> inkább conntrack
  - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
- - per host tiltás
+ - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash...
+ - zóna többszörös lookup (*-os zónákra lookupolni).
+ - beépített zónák: local, internet
 
 Koncepció:
  - zona - program - instance
@@ -87,7 +89,7 @@ Koncepció:
      - int direction
      - int verdict -> or verdict has direction?  
  - zona->zone_id
-  - verdictek: ACCEPT,ACCEPT_INST,ACCEPT_CONN,DENIED,DENIED_INST,DENIED_CONN
+  - verdictek: ACCEPT,ACCEPT_INST,ACCEPT_CONN,DENIED,DENIED_INST,DENIED_CONN (ACCEPT/DENIED_CONN nem lesz...)
  - config szabályok:
 	- [rule]
   -   program,sport,sip,sdomain,dport,dip,ddomain,verdict

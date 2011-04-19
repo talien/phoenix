@@ -1,5 +1,10 @@
 # sample config file
 #zones
+
+[rule]
+	program = /usr/bin/ssh
+	verdict = accept
+
 [zones]
 	local = 10.0.0.0/8
 	internet = 0.0.0.0/0

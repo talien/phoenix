@@ -185,7 +185,7 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 		g_mutex_unlock(apptable_lock);
 		return rule;
 	}
-	hash = pid * 4 + direction;
+	hash = 0 * 4 + direction;
 	rule = g_hash_table_lookup(chain, &hash);
 	g_mutex_unlock(apptable_lock);
 	return rule;
