@@ -476,7 +476,7 @@ struct pollfd polls[4];
 struct timespec ival;
 
 //main processing iteration, processing normal queues (inbound, and outbound)
-gint timer_callback(gpointer data G_GNUC_UNUSED)
+gint main_loop_iterate()
 {
 	int ret;
 
@@ -677,8 +677,8 @@ int main(int argc, char **argv)
     // some kind of "Main Loop"
 	while (!end)
 	{
-		timer_callback(NULL);
-		sleep(0);
+		main_loop_iterate();
+//		sleep(0);
 	};
 
 exit:

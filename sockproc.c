@@ -13,45 +13,43 @@ parse_tcp_line (char *buf, char *s, char *d, unsigned int *sp,
     for (i = 0; buf[i] != '\0'; i++)
     {
 /*			if (buf[i] == ' ')	printf("Tab found"); */
-	if ((prevchar == ' ' && buf[i] != ' ') || (prevchar == ':'))
-	{
-	    field++;
-	    flen = 0;
+		if ((prevchar == ' ' && buf[i] != ' ') || (prevchar == ':'))
+		{
+			field++;
+			flen = 0;
+		}
+		if ((buf[i] != ' ') && (buf[i] != ':'))
+		{
+			if (field == 3)
+			{
+			/* FIXME :  This code is platform dependent, fuck you retard, think it over */
+				if (flen % 2 == 0)
+					s[3 - flen / 2] = 0;
+				s[3 - flen / 2] = s[3 - flen / 2] * 16 + (char) get_val_from_hex (buf[i]);
+			}
+			if (field == 4)
+			{
+				sport = sport * 16 + get_val_from_hex (buf[i]);
+			}
+			if (field == 5)
+			{
+				/* FIXME :  This code is platform dependent, fuck you retard, think it over */
+				if (flen % 2 == 0)
+					d[3 - flen / 2] = 0;
+				d[3 - flen / 2] = d[3 - flen / 2] * 16 + (char) get_val_from_hex (buf[i]);
+			}
+			if (field == 6)
+			{
+				dport = dport * 16 + get_val_from_hex (buf[i]);
+			}
+			if (field == 15)
+			{
+				socknum = socknum * 10 + (buf[i] - 48);
+			}
+		}
+		prevchar = buf[i];
+		flen++;
 	}
-	if ((buf[i] != ' ') && (buf[i] != ':'))
-	{
-	    if (field == 3)
-	    {
-		/* FIXME :  This code is platform dependent, fuck you retard, think it over */
-		if (flen % 2 == 0)
-		    s[3 - flen / 2] = 0;
-		s[3 - flen / 2] =
-		    s[3 - flen / 2] * 16 + (char) get_val_from_hex (buf[i]);
-	    }
-	    if (field == 4)
-	    {
-		sport = sport * 16 + get_val_from_hex (buf[i]);
-	    }
-	    if (field == 5)
-	    {
-		/* FIXME :  This code is platform dependent, fuck you retard, think it over */
-		if (flen % 2 == 0)
-		    d[3 - flen / 2] = 0;
-		d[3 - flen / 2] =
-		    d[3 - flen / 2] * 16 + (char) get_val_from_hex (buf[i]);
-	    }
-	    if (field == 6)
-	    {
-		dport = dport * 16 + get_val_from_hex (buf[i]);
-	    }
-	    if (field == 15)
-	    {
-		socknum = socknum * 10 + (buf[i] - 48);
-	    }
-	}
-	prevchar = buf[i];
-	flen++;
-    }
     *sp = sport;
     *dp = dport;
     *sn = socknum;
@@ -303,6 +301,7 @@ get_pid_from_sock (int socknum)
     int snum, result;
 
     int found = 0;
+	int buf_len = 0;
 
     if ((proc = opendir ("/proc/")) == NULL)
     {
@@ -319,6 +318,7 @@ get_pid_from_sock (int socknum)
 	    strcat (buf, "/proc/");
 	    strcat (buf, procent->d_name);
 	    strcat (buf, "/fd/");
+		buf_len = strlen(buf);
 	    if ((fd = opendir (buf)) == NULL)
 	    {
 		perror
@@ -328,7 +328,8 @@ get_pid_from_sock (int socknum)
 	    }
 	    while ((fdent = readdir (fd)) && !found)
 	    {
-		strncpy (buf2, buf, 100);
+		//strncpy (buf2, buf, 100);
+		memcpy(buf2, buf, buf_len + 1);
 		strcat (buf2, fdent->d_name);
 		llen = readlink (buf2, lname, sizeof (lname));
 		if ((int) llen > 0)

@@ -73,6 +73,7 @@ TODO:
  - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash...
  - zóna többszörös lookup (*-os zónákra lookupolni).
  - beépített zónák: local, internet
+ - comment lehessen sor végén is
 
 Koncepció:
  - zona - program - instance
