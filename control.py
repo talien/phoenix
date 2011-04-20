@@ -249,10 +249,10 @@ class MainWindow(gtk.Window):
 		zone_edit_button = gtk.Button("Edit zone...")
 		zone_add_button = gtk.Button("Add zone...");
 		
-		zonebuttons.pack_start(zone_commit_button)
-		zonebuttons.pack_start(zone_edit_button)
 		zonebuttons.pack_start(zone_add_button)
-
+		zonebuttons.pack_start(zone_edit_button)
+		zonebuttons.pack_start(zone_commit_button)
+			
 		zone_box = gtk.VBox(False,0)
 
 		zone_box.pack_start(self.zoneview)
@@ -261,9 +261,9 @@ class MainWindow(gtk.Window):
 		vbox.pack_start(treeview,True, True, 0)
 		vbox.pack_end(zone_box, True, True, 0)
 
-		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
-		zone_edit_button.connect("clicked", self.zone_edit_clicked, None)
 		zone_add_button.connect("clicked", self.zone_add_clicked, None)
+		zone_edit_button.connect("clicked", self.zone_edit_clicked, None)
+		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
 
 		self.add(vbox)
 		self.show_all()
