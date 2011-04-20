@@ -153,126 +153,126 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
     const gchar nullip[4] = { 0, 0, 0, 0 };
     if (!tcp)
     {
-	perror ("Error opening file:");
-	return -1;
+		perror ("Error opening file:");
+		return -1;
     }
     while (fgets (buf, sizeof (buf), tcp) != NULL)
     {
-	gchar s[4];
+		gchar s[4];
 
-	gchar d[4];
+		gchar d[4];
 
-	unsigned int sport = 0, dport = 0, socknum = 0;
+		unsigned int sport = 0, dport = 0, socknum = 0;
 
-	parse_tcp_line (buf, s, d, &sport, &dport, &socknum);
-	lnum++;
-	if (direction == OUTBOUND)
-	{
-	    if ((dport == c->dport && sport == c->sport
-		 && !strncmp (s, (gchar *) c->srcip, 4)
-		 && !strncmp (d, (gchar *) c->destip, 4))
-		|| (dport == c->sport && sport == c->dport
-		    && !strncmp (s, (gchar *) c->destip, 4)
-		    && !strncmp (d, (gchar *) c->srcip, 4)))
-	    {
-		char fname[100];
+		parse_tcp_line (buf, s, d, &sport, &dport, &socknum);
+		lnum++;
+		if (direction == OUTBOUND)
+		{
+			if ((dport == c->dport && sport == c->sport
+			 && !strncmp (s, (gchar *) c->srcip, 4)
+			 && !strncmp (d, (gchar *) c->destip, 4))
+			|| (dport == c->sport && sport == c->dport
+				&& !strncmp (s, (gchar *) c->destip, 4)
+				&& !strncmp (d, (gchar *) c->srcip, 4)))
+			{
+				char fname[100];
 
-		char procname[1024];
+				char procname[1024];
 
-		int pnlen;
+				int pnlen;
 
-		c->pid = get_pid_from_sock (socknum);
-		sprintf (fname, "/proc/%d/exe", c->pid);
-		pnlen = readlink (fname, procname, sizeof (procname));
-		procname[pnlen] = '\0';
-		c->proc_name = g_string_new (procname);
-		fclose(tcp);
-		return pnlen + 1;
-	    }
-	}
-	else
-	{
-	    if ((sport == c->dport) && (!strncmp (s, nullip, 4) || !strncmp ((char*)c->destip, s, 4)))
-	    {
-			char fname[100];
+				c->pid = get_pid_from_sock (socknum);
+				sprintf (fname, "/proc/%d/exe", c->pid);
+				pnlen = readlink (fname, procname, sizeof (procname));
+				procname[pnlen] = '\0';
+				c->proc_name = g_string_new (procname);
+				fclose(tcp);
+				return pnlen + 1;
+			}
+		}
+		else
+		{
+			if ((sport == c->dport) && (!strncmp (s, nullip, 4) || !strncmp ((char*)c->destip, s, 4)))
+			{
+				char fname[100];
 
-			char procname[1024];
+				char procname[1024];
 
-			int pnlen;
+				int pnlen;
 
-			c->pid = get_pid_from_sock (socknum);
-			sprintf (fname, "/proc/%d/exe", c->pid);
-			pnlen = readlink (fname, procname, sizeof (procname));
-			procname[pnlen] = '\0';
-			c->proc_name = g_string_new (procname);
-			fclose(tcp);
-			return pnlen + 1;
-	    }
-	}
-    }
+				c->pid = get_pid_from_sock (socknum);
+				sprintf (fname, "/proc/%d/exe", c->pid);
+				pnlen = readlink (fname, procname, sizeof (procname));
+				procname[pnlen] = '\0';
+				c->proc_name = g_string_new (procname);
+				fclose(tcp);
+				return pnlen + 1;
+			}
+		}
+		}
     fclose (tcp);
     tcp = fopen (f6name, "r");
     lnum = 0;
     if (!tcp)
     {
-	perror ("Error opening file:");
-	return -1;
+		perror ("Error opening file:");
+		return -1;
     }
     printf ("Searching in tcp6 connections\n");
     while (fgets (buf, sizeof (buf), tcp) != 0)
     {
-	char s[4];
+		char s[4];
 
-	char d[4];
+		char d[4];
 
-	unsigned int sport = 0, dport = 0, socknum = 0;
+		unsigned int sport = 0, dport = 0, socknum = 0;
 
-	parse_tcp6_line (buf, s, d, &sport, &dport, &socknum);
-	lnum++;
-	if (direction == OUTBOUND)
-	{
-	    if ((dport == c->dport && sport == c->sport
-		 && !strncmp (s, (char*)c->srcip, 4) && !strncmp (d, (char*)c->destip, 4))
-		|| (dport == c->sport && sport == c->dport
-		    && !strncmp (s, (char*)c->destip, 4)
-		    && !strncmp (d, (char*)c->srcip, 4)))
-	    {
-		char fname[100];
+		parse_tcp6_line (buf, s, d, &sport, &dport, &socknum);
+		lnum++;
+		if (direction == OUTBOUND)
+		{
+			if ((dport == c->dport && sport == c->sport
+			 && !strncmp (s, (char*)c->srcip, 4) && !strncmp (d, (char*)c->destip, 4))
+			|| (dport == c->sport && sport == c->dport
+				&& !strncmp (s, (char*)c->destip, 4)
+				&& !strncmp (d, (char*)c->srcip, 4)))
+			{
+				char fname[100];
 
-		char procname[1024];
+				char procname[1024];
 
-		int pnlen;
+				int pnlen;
 
-		c->pid = get_pid_from_sock (socknum);
-		sprintf (fname, "/proc/%d/exe", c->pid);
-		pnlen = readlink (fname, procname, sizeof (procname));
-		procname[pnlen] = '\0';
-		c->proc_name = g_string_new (procname);
-		fclose(tcp);
-		return pnlen + 1;
-	    }
+				c->pid = get_pid_from_sock (socknum);
+				sprintf (fname, "/proc/%d/exe", c->pid);
+				pnlen = readlink (fname, procname, sizeof (procname));
+				procname[pnlen] = '\0';
+				c->proc_name = g_string_new (procname);
+				fclose(tcp);
+				return pnlen + 1;
+			}
+		}
+		else
+		{
+			if ((sport == c->dport)
+			&& (!strncmp (s, nullip, 4) || !strncmp ((char*)c->destip, s, 4)))
+			{
+				char fname[100];
+
+				char procname[1024];
+
+				int pnlen;
+
+				c->pid = get_pid_from_sock (socknum);
+				sprintf (fname, "/proc/%d/exe", c->pid);
+				pnlen = readlink (fname, procname, sizeof (procname));
+				procname[pnlen] = '\0';
+				c->proc_name = g_string_new (procname);
+				fclose(tcp);
+				return pnlen + 1;
+			}
+		}
 	}
-	else
-	{
-	    if ((sport == c->dport)
-		&& (!strncmp (s, nullip, 4) || !strncmp ((char*)c->destip, s, 4)))
-	    {
-		char fname[100];
-
-		char procname[1024];
-
-		int pnlen;
-
-		c->pid = get_pid_from_sock (socknum);
-		sprintf (fname, "/proc/%d/exe", c->pid);
-		pnlen = readlink (fname, procname, sizeof (procname));
-		procname[pnlen] = '\0';
-		c->proc_name = g_string_new (procname);
-		fclose(tcp);
-		return pnlen + 1;
-	    }
-	}
-    }
     fclose (tcp);
 
     return -1;
