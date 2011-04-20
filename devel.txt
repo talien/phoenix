@@ -74,6 +74,8 @@ TODO:
  - zóna többszörös lookup (*-os zónákra lookupolni).
  - beépített zónák: local, internet
  - comment lehessen sor végén is
+ - zóna törlés control-on, zóna mentés control-on
+ - input validáció control-on
 
 Koncepció:
  - zona - program - instance

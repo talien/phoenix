@@ -3,6 +3,7 @@
 #include <string.h>
 #include "misc.h"
 #include "zones.h"
+#include "data.h"
 
 extern GString* zone_names[256];
 extern guchar bin[8];
@@ -147,8 +148,14 @@ int phx_serialize_zones(char* buffer, radix_bit* zones)
 
 int phx_deserialize_zones(char* buffer, int len, radix_bit** zones)
 {
+	radix_bit* oldzone;
 	radix_bit* zone = g_new0(radix_bit,1);
 	int buf_pos = 0;
+	guchar ip[4];
+	guint32 mask;
+	GString** names;
+	int i;
+	names = g_new0(GString*,256);
 	while ( buf_pos < len)
 	{
 		GString* zone_name = g_string_new("");
@@ -156,6 +163,23 @@ int phx_deserialize_zones(char* buffer, int len, radix_bit** zones)
 		int id;
 		buf_pos += phx_unpack_data("SiS", buffer+buf_pos, zone_name, &id, network, NULL);
 		log_debug("Zone deserialized, name='%s', id='%d', network='%s'\n", zone_name->str, id, network->str);
+		parse_network(network->str, ip, &mask);
+		zone_add(zone, ip, mask, id);
+		g_string_free(network, TRUE);
+		names[id] = zone_name;
 	}
+	oldzone = *zones;
+	g_mutex_lock(zone_mutex);
+	*zones = zone;
+	for (i = 0; i < 256; i++)
+	{
+		if (zone_names[i] != NULL)
+		{
+			g_string_free(zone_names[i], TRUE);
+		}
+		zone_names[i] = names[i];
+	}
+	g_mutex_unlock(zone_mutex);
+	zone_free(oldzone);
 	return buf_pos;
 }

@@ -165,7 +165,7 @@ int parse_config(const char* filename)
 	guchar buf[4];
 	guint32 mask;	
 	FILE* conffile;
-	aliases = g_hash_table_new(g_string_hash, g_string_equal);
+	aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
 
 	if (filename == NULL)
 	{
@@ -317,7 +317,7 @@ void control_handle_query(int sock)
 	else if (!strncmp(command,"SZN",3))
 	{
 		log_debug("Zone setting request got, len='%d'\n", hs_len-3);
-	 	phx_deserialize_zones(command+3, hs_len - 3, NULL);
+	 	phx_deserialize_zones(command+3, hs_len - 3, &zones);
 		send(sock,"ACK",4,0);
 	}
 	close(sock);

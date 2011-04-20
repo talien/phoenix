@@ -9,4 +9,5 @@ int phx_pack_data(const char* format, char* buffer, ...);
 int phx_unpack_data(const char* format, char* buffer, ...);
 void phx_deserialize_data(char* buffer, guint32* verdict, guint32* srczone, guint32* destzone);
 int phx_serialize_zones(char* buffer, radix_bit* zones);
+int phx_deserialize_zones(char* buffer, int len, radix_bit** zones);
 #endif

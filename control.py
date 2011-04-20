@@ -129,6 +129,18 @@ def populate_liststore(liststore, apptable):
 		for direction,rule in chain.iteritems():
 			liststore.append((name, direction%4, rule.pid, rule.verdict,rule.source_zone, rule.dest_zone))
 
+
+def zone_store_to_var(liststore):
+	zones = {}
+	liter = liststore.get_iter_first()
+	while (liter):
+		zid = liststore.get_value(liter, 0)
+		zname = liststore.get_value(liter, 1)
+		znetwork = liststore.get_value(liter, 2)
+		liter = liststore.iter_next(liter)
+		zones[zid] = (zname, znetwork)
+	return zones;
+
 def send_command(command, cdata = None):
 	s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 	s.connect("phxdsock")
@@ -145,19 +157,74 @@ def create_cell(treeview, column_name = "Column", column_text = 0):
 	col.set_attributes(cell,text=column_text)
 	treeview.append_column(col)
 
+def get_first_free_zone_id(liststore):
+	zids = set()
+	ziter = liststore.get_iter_first()
+	while (ziter):
+		zids = zids | set([liststore.get_value(ziter,0)])
+		ziter = liststore.iter_next(ziter)
+	for i in range(1,256):
+		if (not i in zids):
+			return i
 
+class ZoneEditWindow(gtk.Window):
+	def __init__(self, ziter, liststore):
+		gtk.Window.__init__(self)
+		layout = gtk.Fixed()
+		zname = ""
+		self.zid = get_first_free_zone_id(liststore)
+		znet = ""
+		if (ziter != None):
+			self.wtype = 0
+			self.zid = liststore.get_value(ziter, 0)
+			zname = liststore.get_value(ziter, 1)
+			znet = liststore.get_value(ziter, 2)
+		self.ziter = ziter
+		self.liststore = liststore
+		self.name_entry = gtk.Entry()
+		self.name_entry.set_text(zname)
+		self.network_entry = gtk.Entry()
+		self.network_entry.set_text(znet)
+		layout.put(gtk.Label("Zone id"), 0, 0)
+		layout.put(gtk.Label("Zone name"),0,30)
+		layout.put(gtk.Label("Network"),0,60)
+		layout.put(gtk.Label("%d" % self.zid), 100,0)
+		layout.put(self.name_entry,100,30)
+		layout.put(self.network_entry, 100,60)
+		okbutton = gtk.Button("OK")
+		cancelbutton = gtk.Button("Cancel")
+		okbutton.connect("clicked", self.ok_button_clicked, None)
+		cancelbutton.connect("clicked", self.cancel_button_clicked, None)
+		layout.put(okbutton,30,150);
+		layout.put(cancelbutton,120,150);
+
+		self.resize(200,200);
+		self.add(layout)
+		self.show_all()
+
+	def ok_button_clicked(self, widget, data=None):
+		if (self.ziter !=None):
+			self.liststore.set_value(self.ziter, 1, self.name_entry.get_text())
+			self.liststore.set_value(self.ziter, 2, self.network_entry.get_text())
+		else:
+			self.liststore.append((self.zid, self.name_entry.get_text(),self.network_entry.get_text()))
+		self.destroy()
+
+	def cancel_button_clicked(self, widget, data=None):
+		self.destroy()
+		
 class MainWindow(gtk.Window):
 
 
 	def __init__(self,apptable,zones):
 		gtk.Window.__init__(self)
 		self.zones = zones
-		liststore = gtk.ListStore(str, int, int,int, str, str)
-		zonestore = gtk.ListStore(int, str, str)
-		populate_liststore(liststore, apptable)
-		populate_zone_store(zonestore, zones)
-		treeview = gtk.TreeView(liststore)
-		zoneview = gtk.TreeView(zonestore)
+		self.liststore = gtk.ListStore(str, int, int,int, str, str)
+		self.zonestore = gtk.ListStore(int, str, str)
+		populate_liststore(self.liststore, apptable)
+		populate_zone_store(self.zonestore, zones)
+		treeview = gtk.TreeView(self.liststore)
+		self.zoneview = gtk.TreeView(self.zonestore)
 
 		vbox = gtk.VBox(False, 0)
 
@@ -168,9 +235,9 @@ class MainWindow(gtk.Window):
 		create_cell(treeview, "Source zone", 4)
 		create_cell(treeview, "Destination zone", 5)
 
-		create_cell(zoneview, "Zone ID", 0)
-		create_cell(zoneview, "Zone name", 1)
-		create_cell(zoneview, "Network", 2)
+		create_cell(self.zoneview, "Zone ID", 0)
+		create_cell(self.zoneview, "Zone name", 1)
+		create_cell(self.zoneview, "Network", 2)
 
 		self.connect("delete_event", self.destroy);
 
@@ -179,26 +246,45 @@ class MainWindow(gtk.Window):
 		zonebuttons = gtk.HBox(False, 0)
 		
 		zone_commit_button = gtk.Button("Commit")
+		zone_edit_button = gtk.Button("Edit zone...")
+		zone_add_button = gtk.Button("Add zone...");
 		
 		zonebuttons.pack_start(zone_commit_button)
+		zonebuttons.pack_start(zone_edit_button)
+		zonebuttons.pack_start(zone_add_button)
 
 		zone_box = gtk.VBox(False,0)
 
-		zone_box.pack_start(zoneview)
+		zone_box.pack_start(self.zoneview)
 		zone_box.pack_end(zonebuttons)
 
 		vbox.pack_start(treeview,True, True, 0)
 		vbox.pack_end(zone_box, True, True, 0)
 
 		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
+		zone_edit_button.connect("clicked", self.zone_edit_clicked, None)
+		zone_add_button.connect("clicked", self.zone_add_clicked, None)
 
 		self.add(vbox)
 		self.show_all()
 
 	def zone_commit_clicked(self, widget, data = None):
+		self.zones = zone_store_to_var(self.zonestore)
 		test = pack_zones(self.zones)
 		print "Zone pack test '%r'" % test
 		data = send_command("SZN"+test);
+
+	def zone_edit_clicked(self, widget, data = None):
+		(model, ziter) = self.zoneview.get_selection().get_selected()
+		if (ziter == None):
+			print "No selection"
+			return
+		win = ZoneEditWindow(ziter, self.zonestore)
+		win.show()
+
+	def zone_add_clicked(self, widget, data = None):
+		win = ZoneEditWindow(None, self.zonestore)
+		win.show()
 
 	def destroy(self, widget, data = None):
 		gtk.main_quit();

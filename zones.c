@@ -84,3 +84,13 @@ int zone_lookup(radix_bit* zone_tree, guchar* ip)
 	g_mutex_unlock(zone_mutex);
 	return lastzone;
 }
+
+void zone_free(radix_bit* zone_tree)
+{
+	if (zone_tree != NULL)
+	{
+		zone_free(zone_tree->zero);
+		zone_free(zone_tree->one);
+		g_free(zone_tree);
+	}
+}
