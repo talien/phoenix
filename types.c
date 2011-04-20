@@ -1,4 +1,6 @@
 #include "types.h"
+#include "misc.h"
+#include <glib.h>
 
 phx_conn_data* phx_conn_data_new()
 {
@@ -9,11 +11,13 @@ phx_conn_data* phx_conn_data_new()
 
 void phx_conn_data_ref(phx_conn_data* cdata)
 {
+	g_assert(cdata->refcnt != 0);
 	cdata->refcnt = cdata->refcnt + 1;
 }
 
 void phx_conn_data_unref(phx_conn_data* cdata)
 {
+//	log_debug("Unrefing conndata, proc_name='%s'\n", cdata->proc_name->str);
 	cdata->refcnt = cdata->refcnt - 1;
 	if (cdata->refcnt == 0)
 	{

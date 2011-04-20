@@ -6,6 +6,7 @@
 
 #include <glib.h>
 #include "misc.h"
+#include "data.h"
 
 guchar bin[8] = {1,2,4,8,16,32,64,128};
 
@@ -59,6 +60,7 @@ int zone_add(radix_bit* zone_tree, guchar* ip, guint32 mask, int id)
 int zone_lookup(radix_bit* zone_tree, guchar* ip)
 {
 	int level = 0;	
+	g_mutex_lock(zone_mutex);
 	radix_bit *tree_item = zone_tree;
     int lastzone = 0;
 	log_debug("Looking up zone for ip: %u.%u.%u.%u \n", ip[0], ip[1], ip[2], ip[3]);
@@ -79,5 +81,6 @@ int zone_lookup(radix_bit* zone_tree, guchar* ip)
 		}
 		level++;
 	}
+	g_mutex_unlock(zone_mutex);
 	return lastzone;
 }

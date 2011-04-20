@@ -13,4 +13,5 @@ extern struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_
 extern GAsyncQueue *to_gui;
 extern int pending_conn_count;
 extern int in_pending_count;
+extern GMutex* zone_mutex;
 #endif

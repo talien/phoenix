@@ -251,13 +251,14 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 
 	// extracting connection data from payload
 	extr_res = phx_data_extract(payload, conndata, direction);
-	if (extr_res == -1)
+	if (extr_res <= 0)
 	{
 		log_debug("Connection timeouted, dropping packet\n");
 		phx_conn_data_unref(conndata);
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
 				       (guchar*)payload);
 	}
+	
 	//zone lookup
 	srczone = zone_lookup(zones, conndata->srcip);
 	dstzone = zone_lookup(zones, conndata->destip);
@@ -296,6 +297,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		{
 			log_debug("Program %s found in list, asking again\n",
 				  conndata->proc_name->str);
+			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
 			//This code is needed here, because i have to "jump over" the next DENY_CONN section
 			mark = direction == OUTBOUND ? 0x2 : 0x1;

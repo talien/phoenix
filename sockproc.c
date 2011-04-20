@@ -215,10 +215,10 @@ get_proc_from_conn (struct phx_conn_data *c, int direction)
     lnum = 0;
     if (!tcp)
     {
-		perror ("Error opening file:");
+		log_debug ("Error opening file: /proc/net/tcp6\n");
 		return -1;
     }
-    printf ("Searching in tcp6 connections\n");
+    log_debug ("Searching in tcp6 connections\n");
     while (fgets (buf, sizeof (buf), tcp) != 0)
     {
 		char s[4];

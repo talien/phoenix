@@ -38,6 +38,32 @@ def phx_client_unpack(sformat, data):
         i += 1
     return t
 
+def phx_client_pack(sformat, data):
+	i = 0
+	amount = 0
+	pd = 0
+	result = ""
+	while i < len(sformat):
+		needpack = True
+		if ( sformat[i] == 'S' ):
+			result += struct.pack("<I", len(data[pd]))
+			result += struct.pack("%ds" % len(data[pd]), data[pd])
+			pd += 1
+		elif ( sformat[i] == 'I' ):
+			result += struct.pack("<I", data[pd])
+			pd += 1
+		elif( sformat[i] <= '9' and sformat[i] >= '0'):
+			amount = amount*10 + (ord(sformat[i]) - 48);
+			needpack = False
+		elif ( sformat[i] == 's'):
+			result += struct.pack("%ds" % amount, data[pd])
+			pd += 1;
+		if needpack:
+			amount = 0
+		i += 1
+	return result
+
+
 def parse_rule(data, position, zones):
 	print "Data: %r, position:%d" % (data,position)
 	(pid,verdict,srczone,destzone,strlen) = struct.unpack("IIIII",data[position:position+20])
@@ -86,6 +112,13 @@ def parse_zones(data):
 		position += zlen
 	return zones
 
+def pack_zones(zones):
+	result = ""
+	for zoneid, (zonename, network) in zones.iteritems():
+		if (zoneid != 0):
+			result += phx_client_pack("SIS",(zonename, zoneid, network));
+	return result
+
 def populate_zone_store(liststore, zones):
 	for zoneid, (zonename, network) in zones.iteritems():
 		if zoneid != 0:
@@ -118,6 +151,7 @@ class MainWindow(gtk.Window):
 
 	def __init__(self,apptable,zones):
 		gtk.Window.__init__(self)
+		self.zones = zones
 		liststore = gtk.ListStore(str, int, int,int, str, str)
 		zonestore = gtk.ListStore(int, str, str)
 		populate_liststore(liststore, apptable)
@@ -142,11 +176,29 @@ class MainWindow(gtk.Window):
 
 		self.resize(400,400)
 
+		zonebuttons = gtk.HBox(False, 0)
+		
+		zone_commit_button = gtk.Button("Commit")
+		
+		zonebuttons.pack_start(zone_commit_button)
+
+		zone_box = gtk.VBox(False,0)
+
+		zone_box.pack_start(zoneview)
+		zone_box.pack_end(zonebuttons)
+
 		vbox.pack_start(treeview,True, True, 0)
-		vbox.pack_end(zoneview, True, True, 0)
+		vbox.pack_end(zone_box, True, True, 0)
+
+		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
 
 		self.add(vbox)
 		self.show_all()
+
+	def zone_commit_clicked(self, widget, data = None):
+		test = pack_zones(self.zones)
+		print "Zone pack test '%r'" % test
+		data = send_command("SZN"+test);
 
 	def destroy(self, widget, data = None):
 		gtk.main_quit();

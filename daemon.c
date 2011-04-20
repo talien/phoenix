@@ -46,6 +46,8 @@ GCond *pending_cond;
 
 GMutex *cond_mutex;
 
+GMutex *zone_mutex;
+
 radix_bit *zones;
 
 GHashTable* aliases;
@@ -304,13 +306,19 @@ void control_handle_query(int sock)
 		send(sock, buffer, data_len, 0);
 		free(buffer);
 	}
-	else if (!strncmp(command,"GZN",7))
+	else if (!strncmp(command,"GZN",3))
 	{
 		buffer = g_new(char,8192);
 		data_len = phx_serialize_zones(buffer, zones);
 		log_debug("Get zone request received, sending zones, size='%d'\n", data_len);
 		send(sock, buffer, data_len, 0);
 		g_free(buffer);
+	}
+	else if (!strncmp(command,"SZN",3))
+	{
+		log_debug("Zone setting request got, len='%d'\n", hs_len-3);
+	 	phx_deserialize_zones(command+3, hs_len - 3, NULL);
+		send(sock,"ACK",4,0);
 	}
 	close(sock);
 	
@@ -374,7 +382,6 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 		uname = g_string_prepend(aname, "phxsock-");
 	}
 	strcpy(remote.sun_path, uname->str);
-	g_string_free(uname, TRUE);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1)
 	{
@@ -383,8 +390,10 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 
 		data->state = DENY_CONN;
 		close(s);
+		g_string_free(uname, TRUE);
 		return data;
 	}
+	g_string_free(uname, TRUE);
 	log_debug("Sending %d bytes of data to GUI\n", dlen);
 	if (send(s, phx_buf, dlen, 0) == -1)
 	{
@@ -656,6 +665,8 @@ int main(int argc, char **argv)
 	signal(SIGTERM, signal_quit);
 	signal(SIGINT, signal_quit);
 	g_thread_init(NULL);
+
+	zone_mutex = g_mutex_new();
 
 	pending_cond = g_cond_new();
 	to_gui = g_async_queue_new();

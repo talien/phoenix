@@ -145,4 +145,17 @@ int phx_serialize_zones(char* buffer, radix_bit* zones)
 	return buffer_length;
 }
 
-
+int phx_deserialize_zones(char* buffer, int len, radix_bit** zones)
+{
+	radix_bit* zone = g_new0(radix_bit,1);
+	int buf_pos = 0;
+	while ( buf_pos < len)
+	{
+		GString* zone_name = g_string_new("");
+		GString* network = g_string_new("");
+		int id;
+		buf_pos += phx_unpack_data("SiS", buffer+buf_pos, zone_name, &id, network, NULL);
+		log_debug("Zone deserialized, name='%s', id='%d', network='%s'\n", zone_name->str, id, network->str);
+	}
+	return buf_pos;
+}
