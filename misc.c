@@ -55,14 +55,14 @@ _log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
     va_end (l);
 }
 
-void
+/*void
 write_ip (unsigned char *buffer)
 {
     printf ("%d.", buffer[0]);
     printf ("%d.", buffer[1]);
     printf ("%d.", buffer[2]);
     printf ("%d", buffer[3]);
-}
+}*/
 
 void
 swrite_ip (char *buffer, char *out)

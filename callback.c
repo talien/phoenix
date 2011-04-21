@@ -253,7 +253,19 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 	extr_res = phx_data_extract(payload, conndata, direction);
 	if (extr_res <= 0)
 	{
-		log_debug("Connection timeouted, dropping packet\n");
+		GString *sip = phx_write_ip((char*)conndata->srcip);
+		GString *dip = phx_write_ip((char*)conndata->destip);
+		if (direction == OUTBOUND)
+		{
+			log_debug("Connection timeouted, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", sip->str, conndata->sport, dip->str, conndata->dport);
+		}
+		else
+		{
+			log_debug("Nothing listens on port %d, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", conndata->dport, sip->str, conndata->sport, dip->str, conndata->dport);
+
+		}
+		g_string_free(sip,TRUE);
+		g_string_free(dip,TRUE);
 		phx_conn_data_unref(conndata);
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
 				       (guchar*)payload);
