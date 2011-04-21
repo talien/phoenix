@@ -76,6 +76,11 @@ TODO:
  - comment lehessen sor végén is
  - zóna törlés control-on, zóna mentés control-on
  - input validáció control-on
+ - rule editing -> add/delete átgondolás, merge
+ - pid-et beletenni hash-be, userid nem lesz, gint64 hash.
+ - config-ban lehessen zónát megadni a rule-nak (rule parseolás később, mint a zóna parseolás).
+ - config-ban lehessen zóna és rule file-t megadni.
+ - control.py-ban rule-ok mentésére lehetőség
 
 Koncepció:
  - zona - program - instance
