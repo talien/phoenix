@@ -4,12 +4,15 @@ import os,sys,socket, struct
 import gtk
 
 class Rule:
-	def __init__(self, pid, verdict, appname, source_zone, dest_zone):
+	def __init__(self, appname, pid, direction, verdict, src_zone_id, source_zone, dst_zone_id, dest_zone):
 		self.pid = pid
 		self.verdict = verdict
 		self.appname = appname
 		self.source_zone = source_zone
 		self.dest_zone = dest_zone
+		self.src_zone_id = src_zone_id
+		self.dst_zone_id = dst_zone_id
+		self.direction = direction
 
 def phx_client_unpack(sformat, data):
     i = 0
@@ -70,7 +73,7 @@ def parse_rule(data, position, zones):
 	position += 20
 	(appname,) = struct.unpack("<%ds" % strlen,data[position:position+strlen])
 	position += strlen
-	return (appname, position, Rule(pid, verdict, appname, zones[srczone][0], zones[destzone][0]))
+	return (appname, position, Rule(appname, pid, 0, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0]))
 	
 
 def parse_chain(data, position, zones):
@@ -83,6 +86,7 @@ def parse_chain(data, position, zones):
 		(hash_value,) = struct.unpack("I",data[position:position+4])
 		position = position + 4
 		(appname, position, rule) = parse_rule(data,position, zones)
+		rule.direction = hash_value % 4
 		chain[hash_value] = rule
 	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
 	return (appname, position, chain)
@@ -127,11 +131,13 @@ def populate_zone_store(liststore, zones):
 def populate_liststore(liststore, apptable):
 	for name,chain in apptable.iteritems():
 		for direction,rule in chain.iteritems():
-			liststore.append((name, direction%4, rule.pid, rule.verdict,rule.source_zone, rule.dest_zone))
+			liststore.append((name, rule.pid, direction%4, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
 
 
-def zone_store_to_var(liststore):
+def zone_store_to_var(liststore, append_wildcard = False):
 	zones = {}
+	if append_wildcard:
+		zones[0] = ("*","0.0.0.0/0")
 	liter = liststore.get_iter_first()
 	while (liter):
 		zid = liststore.get_value(liter, 0)
@@ -150,6 +156,14 @@ def send_command(command, cdata = None):
 	s.close()
 	return data
 
+def get_zone_id_from_name(zname, zones):
+	for zoneid, (zonename, network) in zones.iteritems():
+		if (zonename == zname):
+			return zoneid
+
+	#hmm, perhaps i should use some *normal* error handling? (exceptions)
+	return -1
+
 def create_cell(treeview, column_name = "Column", column_text = 0):
 	cell = gtk.CellRendererText()
 	col = gtk.TreeViewColumn( column_name )
@@ -166,6 +180,76 @@ def get_first_free_zone_id(liststore):
 	for i in range(1,256):
 		if (not i in zids):
 			return i
+
+class RuleEditWindow(gtk.Window):
+	def fill_zones(self, combobox, zonestore, active):
+		zones = zone_store_to_var(zonestore, True)
+		index = 0
+		act_ind = 0
+		for zoneid, (zonename, network) in zones.iteritems():
+			combobox.append_text(zonename)
+			if (zonename == active):
+				act_ind = index
+			index += 1
+		combobox.set_active(act_ind)
+
+	def __init__(self, riter, zonestore, rulestore):
+		gtk.Window.__init__(self)
+		layout = gtk.Fixed()
+
+		self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
+		
+		layout.put(gtk.Label("Application name"), 10, 10) 
+		layout.put(gtk.Label("Application pid"), 10, 40)
+		layout.put(gtk.Label("Direction"), 10, 70)
+		layout.put(gtk.Label("Source Zone"), 10, 100)
+		layout.put(gtk.Label("Destination Zone"), 10, 130)
+		layout.put(gtk.Label("Verdict"), 10, 160)
+
+		self.name_entry = gtk.Entry()
+		self.name_entry.set_text(self.rule.appname)
+		layout.put(self.name_entry, 150,7)
+
+		self.pid_entry = gtk.Entry()
+		self.pid_entry.set_text("%s" % self.rule.pid)
+		layout.put(self.pid_entry, 150, 37)
+
+		self.dir_entry = gtk.combo_box_new_text()
+		self.dir_entry.append_text("OUTBOUND")
+		self.dir_entry.append_text("INBOUND")
+		self.dir_entry.set_active(self.rule.direction)
+		layout.put(self.dir_entry, 150, 67)
+
+		self.src_zone_entry = gtk.combo_box_new_text()
+		self.fill_zones(self.src_zone_entry, zonestore, self.rule.source_zone)
+		layout.put(self.src_zone_entry, 150, 97)
+
+		self.dst_zone_entry = gtk.combo_box_new_text()
+		self.fill_zones(self.dst_zone_entry, zonestore, self.rule.dest_zone)
+		layout.put(self.dst_zone_entry, 150, 127)
+
+		self.verdict_entry = gtk.combo_box_new_text()
+		self.verdict_entry.append_text("NEW")
+		self.verdict_entry.append_text("ACCEPTED")
+		self.verdict_entry.append_text("DENIED")
+		self.verdict_entry.append_text("DENY_CONN")
+		self.verdict_entry.append_text("ACCEPT_CONN")
+		self.verdict_entry.append_text("ASK")
+		self.verdict_entry.set_active(self.rule.verdict)
+		layout.put(self.verdict_entry, 150, 157)
+
+		cancelbutton = gtk.Button("Cancel")
+		layout.put(cancelbutton, 10, 250)
+
+		cancelbutton.connect("clicked", self.cancel_button_clicked, None)
+
+		self.resize(350,300)
+		self.add(layout)
+		self.show_all()
+
+	def cancel_button_clicked(self, widget, data = None):
+		self.destroy()
+		
 
 class ZoneEditWindow(gtk.Window):
 	def __init__(self, ziter, liststore):
@@ -219,21 +303,23 @@ class MainWindow(gtk.Window):
 	def __init__(self,apptable,zones):
 		gtk.Window.__init__(self)
 		self.zones = zones
-		self.liststore = gtk.ListStore(str, int, int,int, str, str)
+		self.liststore = gtk.ListStore(str, int, int,int, int,str, int,str)
 		self.zonestore = gtk.ListStore(int, str, str)
 		populate_liststore(self.liststore, apptable)
 		populate_zone_store(self.zonestore, zones)
-		treeview = gtk.TreeView(self.liststore)
+		self.treeview = gtk.TreeView(self.liststore)
 		self.zoneview = gtk.TreeView(self.zonestore)
 
 		vbox = gtk.VBox(False, 0)
 
-		create_cell(treeview, "Program", 0)
-		create_cell(treeview, "Direction", 1)
-		create_cell(treeview, "Pid", 2)
-		create_cell(treeview, "Verdict", 3)
-		create_cell(treeview, "Source zone", 4)
-		create_cell(treeview, "Destination zone", 5)
+		rule_box = gtk.VBox(False, 0)
+
+		create_cell(self.treeview, "Program", 0)
+		create_cell(self.treeview, "Direction", 2)
+		create_cell(self.treeview, "Pid", 1)
+		create_cell(self.treeview, "Verdict", 3)
+		create_cell(self.treeview, "Source zone", 5)
+		create_cell(self.treeview, "Destination zone", 7)
 
 		create_cell(self.zoneview, "Zone ID", 0)
 		create_cell(self.zoneview, "Zone name", 1)
@@ -242,6 +328,13 @@ class MainWindow(gtk.Window):
 		self.connect("delete_event", self.destroy);
 
 		self.resize(400,400)
+
+		rule_edit = gtk.Button("Edit rule...")
+
+		rule_box.pack_start(self.treeview)
+		rule_box.pack_start(rule_edit)
+
+		rule_edit.connect("clicked", self.rule_edit_clicked, None)
 
 		zonebuttons = gtk.HBox(False, 0)
 		
@@ -258,7 +351,7 @@ class MainWindow(gtk.Window):
 		zone_box.pack_start(self.zoneview)
 		zone_box.pack_end(zonebuttons)
 
-		vbox.pack_start(treeview,True, True, 0)
+		vbox.pack_start(rule_box, True, True, 0)
 		vbox.pack_end(zone_box, True, True, 0)
 
 		zone_add_button.connect("clicked", self.zone_add_clicked, None)
@@ -280,6 +373,14 @@ class MainWindow(gtk.Window):
 			print "No selection"
 			return
 		win = ZoneEditWindow(ziter, self.zonestore)
+		win.show()
+
+	def rule_edit_clicked(self, widget, data = None):
+		(model, riter) = self.treeview.get_selection().get_selected()
+		if (riter == None):
+			print "No selection"
+			return
+		win = RuleEditWindow(riter, self.zonestore, self.liststore)
 		win.show()
 
 	def zone_add_clicked(self, widget, data = None):
