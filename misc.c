@@ -162,7 +162,8 @@ get_user (guint32 pid)
     struct passwd *pass = getpwuid (uid);
 
     fclose (statf);
-    return g_string_new (pass->pw_name);
+    GString* result = g_string_new (pass->pw_name);
+	return result;
 }
 
 GString *

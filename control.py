@@ -66,14 +66,15 @@ def phx_client_pack(sformat, data):
 		i += 1
 	return result
 
+#def phx_hash_value(direction, pid, srczone, destzone)
 
 def parse_rule(data, position, zones):
 	print "Data: %r, position:%d" % (data,position)
-	(pid,verdict,srczone,destzone,strlen) = struct.unpack("IIIII",data[position:position+20])
-	position += 20
+	(pid,verdict,srczone,destzone,direction, strlen) = struct.unpack("IIIIII",data[position:position+24])
+	position += 24
 	(appname,) = struct.unpack("<%ds" % strlen,data[position:position+strlen])
 	position += strlen
-	return (appname, position, Rule(appname, pid, 0, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0]))
+	return (appname, position, Rule(appname, pid, direction, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0]))
 	
 
 def parse_chain(data, position, zones):
@@ -83,11 +84,10 @@ def parse_chain(data, position, zones):
 	chain = {}
 	appname = ""
 	for i in range(0,hashes):
-		(hash_value,) = struct.unpack("I",data[position:position+4])
-		position = position + 4
+#		(hash_value,) = struct.unpack("I",data[position:position+4])
+#		position = position + 4
 		(appname, position, rule) = parse_rule(data,position, zones)
-		rule.direction = hash_value % 4
-		chain[hash_value] = rule
+		chain[i] = rule
 	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
 	return (appname, position, chain)
 

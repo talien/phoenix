@@ -4,7 +4,56 @@ import os,sys,socket, getpass, select, struct
 
 dir_map = { 0 : "Outbound", 1 : "Inbound" }
 
+class ClientWindow(gtk.Dialog):
+	def __init__(self, process_name, pid, srcip, sport, destip, dport, direction, sz_name, dz_name, src_zone, dest_zone):
+		gtk.Dialog.__init__(self)
+		self.process_name = process_name;
+		self.pid = pid
+		self.sz_id = sz_name;
+		self.dz_id = dz_name;
+		
+		layout = gtk.Fixed()
+		layout.put(gtk.Label("The program %s with the following parameters want to reach the internet:" % process_name),10,10);
+		layout.put(gtk.Label("Process ID:%d" % pid),10,35);
+		layout.put(gtk.Label("Source IP: %d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )),10,60)
+		layout.put(gtk.Label("Source port: %d" % sport ),10,85)
+		layout.put(gtk.Label("Destination IP: %d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )),10,110)
+		layout.put(gtk.Label("Destination port: %d" % dport ),10,135)
+		layout.put(gtk.Label("Source zone: %s" % src_zone), 10, 160)
+		layout.put(gtk.Label("Destination zone: %s" % dest_zone), 10,185)
+		layout.put(gtk.Label("Direction: %s" % dir_map[direction]), 10, 210)
 
+		self.instance_radio = gtk.RadioButton(None, "Apply for this instance")
+		layout.put(self.instance_radio, 50, 235);
+		layout.put(gtk.RadioButton(self.instance_radio, "Apply for all instance"),50,255)
+
+		self.source_radio = gtk.RadioButton(None, "Apply for this source zone: %s" % src_zone)
+		layout.put(self.source_radio, 50, 285);
+		layout.put(gtk.RadioButton(self.source_radio, "Apply for all source zone"),50,305)
+
+		self.destination_radio = gtk.RadioButton(None, "Apply for this destination zone: %s" % dest_zone)
+		layout.put(self.destination_radio, 50, 335);
+		layout.put(gtk.RadioButton(self.destination_radio, "Apply for all destination zone"),50,355)
+
+		self.add_buttons("Accept", gtk.RESPONSE_YES, "Deny", gtk.RESPONSE_NO);
+
+		self.vbox.pack_start(layout)
+		self.show_all()
+
+	def calculate_values(self):
+		pid = self.pid
+		sz = self.sz_id
+		dz = self.dz_id
+		if (not self.instance_radio.get_active()):
+			pid = 0
+		if (not self.source_radio.get_active()):
+			sz = 0
+		if (not self.destination_radio.get_active()):
+			dz = 0
+
+		return (pid, sz, dz)
+		
+		
 
 def phx_client_unpack(sformat, data):
 	i = 0
@@ -40,14 +89,17 @@ def process_data(data):
 		message = "The program: '%s'\n wants to reach internet\n '%s' -> '%s'\ndo you accept?" % (process_name, sz_name, dz_name)
 	else:
 		message = "The program: '%s'\n wants to accept connections\n '%s' -> '%s'\ndo you accept?" % (process_name, sz_name, dz_name)
-	dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_INFO, gtk.BUTTONS_YES_NO, message)
+#	dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_INFO, gtk.BUTTONS_YES_NO, message)
+#	resp = dialog.run()
+	dialog = ClientWindow(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name)
 	resp = dialog.run()
 	if (resp == gtk.RESPONSE_YES):
 		verdict = 1 # ACCEPTED
 	else:
 		verdict = 2 # DENIED
+	(pid, srczone, destzone) = dialog.calculate_values()
 	dialog.destroy()
-	return struct.pack("<III", verdict, srczone, destzone);
+	return struct.pack("<IIII", verdict, srczone, destzone, pid);
 	
 def gui_timer_callback(lsock):
 	pollobj = select.poll()

@@ -19,11 +19,11 @@ void phx_apptable_init()
 	apptable_lock = g_mutex_new();
 }
 
-guint32 phx_apptable_hash(guint32 direction, guint32 srczone, guint32 destzone)
+guint64 phx_apptable_hash(guint32 direction, guint32 pid, guint32 srczone, guint32 destzone)
 {
     //FIXME: assert on srczone/dstzone > 256
     //FIXME: pid handling -> hash should be guint64?
-	return ((srczone * 256) + destzone) * 4 + direction;
+	return (( ( pid * (guint64)256 + (guint64)srczone) * (guint64)256) + (guint64)destzone) * (guint64)2 + (guint64)direction;
 }
 
 void
@@ -38,22 +38,42 @@ phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, gui
 	rule->destzone = destzone;
 	rule->direction = direction;
 	//guint hash = rule->pid * 4 + direction;
-	guint *hash = g_new0(guint, 1);
+	guint64 *hash = g_new0(guint64, 1);
 
-	*hash = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
+	*hash = phx_apptable_hash(rule->direction, rule->pid, rule->srczone, rule->destzone);
 	g_mutex_lock(apptable_lock);
 	GHashTable *chain =
 	    g_hash_table_lookup(apptable, cdata->proc_name->str);
 
 	if (!chain)
 	{
-		chain = g_hash_table_new(g_int_hash, g_int_equal);
+		chain = g_hash_table_new(g_int64_hash, g_int64_equal);
 		g_hash_table_insert(chain, hash, rule);
 		g_hash_table_insert(apptable, rule->appname->str, chain);
 	} else
 	{
 		g_hash_table_insert(chain, hash, rule);
 	}
+	g_mutex_unlock(apptable_lock);
+};
+
+void phx_apptable_delete(struct phx_conn_data *cdata, int direction, guint32 srczone, guint32 destzone)
+{
+	g_mutex_lock(apptable_lock);
+	GHashTable *chain = g_hash_table_lookup(apptable, cdata->proc_name->str);
+	if (!chain)
+	{
+		g_mutex_unlock(apptable_lock);
+		return;
+	}
+	guint64 hash = phx_apptable_hash(direction, cdata->pid, srczone, destzone);
+	struct phx_app_rule* rule = g_hash_table_lookup(chain, &hash);
+	if (!rule)
+	{
+		g_mutex_unlock(apptable_lock);
+		return;
+	}
+	g_hash_table_remove(chain, &hash);
 	g_mutex_unlock(apptable_lock);
 };
 
@@ -104,7 +124,7 @@ int phx_rule_serialize(struct phx_app_rule* rule, char* buffer)
 	memcpy(buffer+4, &(rule->verdict), sizeof(rule->verdict));
 	memcpy(buffer+8, &len, sizeof(len));
 	memcpy(buffer+12, rule->appname->str, len);*/
-	int size = phx_pack_data("iiiiS", buffer, &(rule->pid), &(rule->verdict), &(rule->srczone), &(rule->destzone), rule->appname, NULL);
+	int size = phx_pack_data("iiiiiS", buffer, &(rule->pid), &(rule->verdict), &(rule->srczone), &(rule->destzone), &(rule->direction), rule->appname, NULL);
 	log_debug("Rule serialized, size='%d, program='%s'\n",size,rule->appname->str);
 	return size;
 }
@@ -115,24 +135,26 @@ int phx_chain_serialize(GHashTable* chain, char* buffer)
 	// hash numbers: int
 	log_debug("Serializing chain, entry number='%d'\n", dir_num);
 	struct phx_app_rule* rule;
-	int position = 4, i;
+	int position = 4;
 	GList* values = g_hash_table_get_values(chain);
 	memcpy(buffer,&dir_num, sizeof(dir_num));
     while (values)
     {
-        // hash value: int, rule size:variable
+        // rule size:variable
+		// no need to store hash.
         /*rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
 		if (rule != NULL)
 		{
 						
 		}*/
-		rule = (struct phx_app_rule*) values->data;
-		i = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
-		memcpy(buffer+position, &i, sizeof(i));
-		position += 4 + phx_rule_serialize(rule, buffer+position+4);
+		rule = (struct phx_app_rule*) values->data;		
+//		i = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
+//		memcpy(buffer+position, &i, sizeof(i));
+		position += phx_rule_serialize(rule, buffer+position);
 		values = values->next;
     }
 	log_debug("Chain serialized, size='%d'\n", position);
+	g_list_free(values);
 	return position;
 }
 
@@ -157,7 +179,16 @@ char* phx_apptable_serialize(int* length)
 	g_assert(table_size == position);
 	if (length)
 		(*length) = table_size;
+	g_list_free(values);
 	return result;
+}
+
+struct phx_app_rule *phx_apptable_hash_lookup(GHashTable* chain, int direction, int pid, guint32 srczone, guint32 destzone)
+{
+	struct phx_app_rule* rule;
+	guint64 hash = phx_apptable_hash(direction, pid, srczone, destzone);
+	rule = g_hash_table_lookup(chain, &hash);
+	return rule;
 }
 
 struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
@@ -176,17 +207,19 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 		return NULL;
 	}
 	log_debug("Chain found, app='%s'\n", appname->str);
-	guint32 hash = phx_apptable_hash(direction, srczone, destzone);
+//	guint64 hash = phx_apptable_hash(direction, pid, srczone, destzone);
 
-	struct phx_app_rule *rule = g_hash_table_lookup(chain, &hash);
+	struct phx_app_rule *rule;
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, pid, srczone, destzone) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, pid, 0, destzone) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, pid, srczone, 0) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, pid, 0, 0) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, 0, srczone, destzone) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, 0, 0, destzone) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, 0, srczone, 0) ) )
+	if ( !(rule = phx_apptable_hash_lookup(chain, direction, 0, 0, 0) ) )
+	rule = NULL;
 
-	if (rule)
-	{
-		g_mutex_unlock(apptable_lock);
-		return rule;
-	}
-	hash = 0 * 4 + direction;
-	rule = g_hash_table_lookup(chain, &hash);
 	g_mutex_unlock(apptable_lock);
 	return rule;
 }

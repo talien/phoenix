@@ -15,9 +15,9 @@ phx_serialize_data (struct phx_conn_data *data, char *buffer)
 			zone_names[data->srczone], zone_names[data->destzone], NULL);
 }
 
-void phx_deserialize_data(char* buffer, guint32* verdict, guint32* srczone, guint32* destzone)
+void phx_deserialize_data(char* buffer, guint32* verdict, guint32* srczone, guint32* destzone, guint32* pid)
 {
-	phx_unpack_data("iii",buffer,verdict, srczone, destzone, NULL);
+	phx_unpack_data("iiii",buffer,verdict, srczone, destzone, pid, NULL);
 }
 
 int phx_pack_data(const char* format, char* buffer, ...)

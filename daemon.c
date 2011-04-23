@@ -52,6 +52,8 @@ radix_bit *zones;
 
 GHashTable* aliases;
 
+int end = 0;
+
 #define PHX_STATE_RULE 1
 #define PHX_STATE_ZONE 2
 #define PHX_STATE_ALIAS 3
@@ -347,7 +349,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	int dlen = phx_serialize_data(data, phx_buf);
 
 	int s, len;
-	guint32 verdict, srczone, destzone;
+	guint32 verdict, srczone, destzone, pid;
 
 	struct sockaddr_un remote;
 
@@ -413,10 +415,13 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 		return data;
 	}
 	log_debug("Got data from GUI on IPC, len:%d\n", recvd);
-	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone);
+	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone, &pid);
+	phx_apptable_delete(data, data->direction, data->srczone, data->destzone);
 	data->state = verdict;
 	data->srczone = srczone;
 	data->destzone = destzone;
+	data->pid = pid;
+	phx_apptable_insert(data, data->direction, pid, srczone, destzone);
 	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d'\n", data->state, data->srczone, data->destzone);
 	close(s);
 	return data;
@@ -534,7 +539,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 {
 	cond_mutex = g_mutex_new();
 	pending_cond = g_cond_new();
-	while (1)
+	while (!end)
 	{
 		g_cond_wait(pending_cond, cond_mutex);
 		log_debug("Waking pending thread\n");
@@ -589,6 +594,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 			}
 		}
 	}
+	return NULL;
 }
 
 /* initializing netlink queues
@@ -643,8 +649,6 @@ void close_queue(struct nfq_handle *handle, struct nfq_q_handle *qhandle)
 	nfq_close(handle);
 }
 
-int end = 0;
-
 void signal_quit(int signum G_GNUC_UNUSED)
 {
 	end = 1;    
@@ -691,7 +695,8 @@ int main(int argc, char **argv)
 		main_loop_iterate();
 //		sleep(0);
 	};
-
+	signal_pending();
+	
 exit:
 
 	log_debug("Closing netlink connections\n");
@@ -702,6 +707,9 @@ exit:
 	close_queue(in_pending_handle, in_pending_qhandle);
 
 	log_debug("Thread exited!\n");
+	g_thread_join(pending_thread);
+
+	g_cond_free(pending_cond);
 
 	g_async_queue_unref(to_gui);
 

@@ -45,6 +45,13 @@ kliens fele communikáció:
  - kliens megkapja, verdict-et mond, visszaküldi a servernek.
  - server beállítja a verdict-et a megfelelő rule-nál-> rule lookup-ot csinál a kliens által visszaküldött adatokból.
 
+lookup rule:
+ - lookup a program névre
+ - ha az van, lookup a hash-re->
+  - hash felépítése: total: 64-bit | 16 bit: reserved | 31 bit:pid | 8 bit: srczone: | 8 bit: destzone   | 1 bit: direction | 
+  - lookup pid, srczone, destzone kitöltve.
+  - lookup elvileg az összes lehetséges kombinációval (3 érték, 0 vagy nem, -> 8 kombináció)
+
 végleges program feature-jei:
  - daemon, client, control
  - client saját window-val
@@ -56,7 +63,7 @@ TODO:
  - /proc/net/tcp6 támogatás (elég csak az ipv4-es címeket nézni). KÉSZ
   - bejövő kapcsolatok tcp6-os problémáját megnézni! KÉSZ
  - Vuze tesztelés, tcp6 connection timeoutok megnézése jobban
- - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása.
+ - dialógusablak kicsit erősebb jelenléte -> saját dialógusablak írása. KÉSZ
 	- daemon-client modell után, client feladata FÉLIG KÉSZ
  - szabályok átgondolása: DROP,ACCEPT,REJECT, mikor, hogyan KÉSZ
   - ICMP reject mark alapján szétválogatni,. KÉSZ
@@ -70,14 +77,14 @@ TODO:
    a /proc-ban, akkor törölni. Túl nagy falat, legvégén, ha lesz idő
  - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás? -> inkább conntrack
  - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
- - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash...
+ - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash... FÉLIG KÉSZ, guint64 a hash
  - zóna többszörös lookup (*-os zónákra lookupolni).
  - beépített zónák: local, internet
  - comment lehessen sor végén is
  - zóna törlés control-on, zóna mentés control-on
  - input validáció control-on
  - rule editing -> add/delete átgondolás, merge
- - pid-et beletenni hash-be, userid nem lesz, gint64 hash.
+ - pid-et beletenni hash-be, userid nem lesz, gint64 hash. KÉSZ
  - config-ban lehessen zónát megadni a rule-nak (rule parseolás később, mint a zóna parseolás).
  - config-ban lehessen zóna és rule file-t megadni.
  - control.py-ban rule-ok mentésére lehetőség
