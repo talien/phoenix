@@ -237,9 +237,12 @@ phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 	cdata->dport =
 	    (unsigned char)payload[headlen + 2] * 256 +
 	    (unsigned char)payload[headlen + 3];
-	strncpy((char*)cdata->destip, (char*)payload + 16, 4);
-	strncpy((char*)cdata->srcip, (char*)payload + 12, 4);
+	memcpy((char*)cdata->destip, (char*)payload + 16, 4);
+	memcpy((char*)cdata->srcip, (char*)payload + 12, 4);
 	cdata->direction = direction;
+	GString *kakukk = phx_write_ip(cdata->srcip);
+	log_debug("Extracted information, srcip='%s'\n", kakukk->str);
+	g_string_free(kakukk, TRUE);
 	return get_proc_from_conn(cdata, direction);
 }
 

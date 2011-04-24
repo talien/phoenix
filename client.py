@@ -17,7 +17,7 @@ class ClientWindow(gtk.Dialog):
 		layout.put(gtk.Label("Process ID:%d" % pid),10,35);
 		layout.put(gtk.Label("Source IP: %d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )),10,60)
 		layout.put(gtk.Label("Source port: %d" % sport ),10,85)
-		layout.put(gtk.Label("Destination IP: %d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )),10,110)
+		layout.put(gtk.Label("Destination IP: %d.%d.%d.%d" % (ord(destip[0]), ord(destip[1]), ord(destip[2]), ord(destip[3]) )),10,110)
 		layout.put(gtk.Label("Destination port: %d" % dport ),10,135)
 		layout.put(gtk.Label("Source zone: %s" % src_zone), 10, 160)
 		layout.put(gtk.Label("Destination zone: %s" % dest_zone), 10,185)

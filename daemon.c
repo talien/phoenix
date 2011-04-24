@@ -543,6 +543,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 	{
 		g_cond_wait(pending_cond, cond_mutex);
 		log_debug("Waking pending thread\n");
+		if (end) continue;
 		int i;
 
 		int ret;

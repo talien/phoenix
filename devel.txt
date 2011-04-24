@@ -78,7 +78,7 @@ TODO:
  - UDP kapcsolatok: szívás lesz, esetleg on-the-fly iptables szabály generálás? -> inkább conntrack
  - reverse dns lookup + dns caching -> lehet, hogy elég, ha csak a gui nézi?
  - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash... FÉLIG KÉSZ, guint64 a hash
- - zóna többszörös lookup (*-os zónákra lookupolni).
+ - zóna többszörös lookup (*-os zónákra lookupolni). KÉSZ
  - beépített zónák: local, internet
  - comment lehessen sor végén is
  - zóna törlés control-on, zóna mentés control-on
@@ -88,6 +88,7 @@ TODO:
  - config-ban lehessen zónát megadni a rule-nak (rule parseolás később, mint a zóna parseolás).
  - config-ban lehessen zóna és rule file-t megadni.
  - control.py-ban rule-ok mentésére lehetőség
+ - lenyomozni a zónafeloldásos bugot (/32-es zónákra nem tud feloldani)
 
 Koncepció:
  - zona - program - instance
