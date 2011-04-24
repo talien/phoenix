@@ -25,8 +25,8 @@ log_debug (gchar * format, ...)
     int sec, msec;
     if (!gettimeofday(&tv,NULL)) 
     {
-	sec = tv.tv_sec;
-	msec = tv.tv_usec;
+		sec = tv.tv_sec;
+		msec = tv.tv_usec;
     }
     
     va_start (l, format);
@@ -45,8 +45,8 @@ _log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
     int sec, msec;
     if (!gettimeofday(&tv,NULL)) 
     {
-	sec = tv.tv_sec;
-	msec = tv.tv_usec;
+		sec = tv.tv_sec;
+		msec = tv.tv_usec;
     }
     
     va_start (l, format);
@@ -54,15 +54,6 @@ _log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
     printf ("[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
     va_end (l);
 }
-
-/*void
-write_ip (unsigned char *buffer)
-{
-    printf ("%d.", buffer[0]);
-    printf ("%d.", buffer[1]);
-    printf ("%d.", buffer[2]);
-    printf ("%d", buffer[3]);
-}*/
 
 void
 swrite_ip (char *buffer, char *out)
@@ -85,11 +76,11 @@ get_val_from_hex (char hex)
 {
     if (hex >= 48 && hex <= 57)
     {
-	return (int) hex - 48;
+		return (int) hex - 48;
     }
     if (hex >= 65 && hex <= 70)
     {
-	return (int) hex - 55;
+		return (int) hex - 55;
     }
     return -1;
 }
@@ -103,24 +94,22 @@ dumphex (unsigned char *buffer, int len)
     printf ("0: ");
     while (k < len)
     {
-	/*printf("i:%d ",i); */
-	printf ("%c", hex[buffer[k] / 16]);
-	printf ("%c ", hex[buffer[k] % 16]);
-	/*printf("n:%d ",buf[i]); */
-	k++;
-	if ((k % 4) == 0)
-	{
-	    if (k < len)
-	    {
-		printf ("\n %d:", k / 4);
+		printf ("%c", hex[buffer[k] / 16]);
+		printf ("%c ", hex[buffer[k] % 16]);
+		k++;
+		if ((k % 4) == 0)
+		{
+			if (k < len)
+			{
+				printf ("\n %d:", k / 4);
 
-	    }
-	    else
-	    {
-		printf ("\n");
-	    }
+			}
+			else
+			{
+				printf ("\n");
+			}
 
-	}
+		}
     }
 
 }
@@ -132,8 +121,8 @@ dumpascii (unsigned char *buffer, int len)
 
     while (k < len)
     {
-	printf ("%c", buffer[k]);
-	k++;
+		printf ("%c", buffer[k]);
+		k++;
     }
     printf ("\n");
 }
@@ -147,13 +136,13 @@ get_user (guint32 pid)
     FILE *statf = fopen (buf, "r");
 
     if (statf == NULL)
-	return NULL;
+		return NULL;
     int i = 0;
 
     while (i < 7)
     {
-	fgets (buf, sizeof (buf), statf);
-	i++;
+		fgets (buf, sizeof (buf), statf);
+		i++;
     }
     int uid;
 
@@ -195,8 +184,8 @@ int parse_network(char* str, guchar* nw, guint32* mask)
 	{
 		if (j == 3) endch = '/';
 		for (i = prev; str[i] != endch && str[i] != '\0'; i++)
-		if (str[i] == '\0')
-			return FALSE;
+			if (str[i] == '\0')
+				return FALSE;
 		str[i] = '\0';
 		nw[j] = (char)atoi(str+prev);
 		prev = i+1;

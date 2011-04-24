@@ -89,6 +89,7 @@ TODO:
  - config-ban lehessen zóna és rule file-t megadni.
  - control.py-ban rule-ok mentésére lehetőség
  - lenyomozni a zónafeloldásos bugot (/32-es zónákra nem tud feloldani)
+ - lenyomozni a pending_conn_count-nál lévő bugot
 
 Koncepció:
  - zona - program - instance

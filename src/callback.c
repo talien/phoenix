@@ -22,7 +22,6 @@ void phx_apptable_init()
 guint64 phx_apptable_hash(guint32 direction, guint32 pid, guint32 srczone, guint32 destzone)
 {
     //FIXME: assert on srczone/dstzone > 256
-    //FIXME: pid handling -> hash should be guint64?
 	return (( ( pid * (guint64)256 + (guint64)srczone) * (guint64)256) + (guint64)destzone) * (guint64)2 + (guint64)direction;
 }
 
@@ -37,7 +36,6 @@ phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, gui
 	rule->srczone = srczone;
 	rule->destzone = destzone;
 	rule->direction = direction;
-	//guint hash = rule->pid * 4 + direction;
 	guint64 *hash = g_new0(guint64, 1);
 
 	*hash = phx_apptable_hash(rule->direction, rule->pid, rule->srczone, rule->destzone);
@@ -87,17 +85,8 @@ void phx_rule_count_size(gpointer key G_GNUC_UNUSED, gpointer value, gpointer us
 
 int phx_chain_count_size(GHashTable* chain)
 {
-	//number of directions: int
+	//number of rules in chain: int
 	int result = 4;
-//	struct phx_app_rule* rule;
-//	int i;
-	/*for (i=0; i<=1; i++)
-	{
-		// hash value: int, rule size:variable
-		rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
-		if (rule != NULL)
-			result += 4 + phx_rule_count_size(rule);
-	}*/
 	g_hash_table_foreach(chain, phx_rule_count_size, &result);
 	log_debug("Chain size counted, size='%d'\n", result);
 	return result;
@@ -119,11 +108,6 @@ int phx_apptable_count_size(GHashTable* apptable)
 
 int phx_rule_serialize(struct phx_app_rule* rule, char* buffer)
 {
-//	int len = rule->appname->len;
-	/*memcpy(buffer, &(rule->pid), sizeof(rule->pid));
-	memcpy(buffer+4, &(rule->verdict), sizeof(rule->verdict));
-	memcpy(buffer+8, &len, sizeof(len));
-	memcpy(buffer+12, rule->appname->str, len);*/
 	int size = phx_pack_data("iiiiiS", buffer, &(rule->pid), &(rule->verdict), &(rule->srczone), &(rule->destzone), &(rule->direction), rule->appname, NULL);
 	log_debug("Rule serialized, size='%d, program='%s'\n",size,rule->appname->str);
 	return size;
@@ -142,14 +126,7 @@ int phx_chain_serialize(GHashTable* chain, char* buffer)
     {
         // rule size:variable
 		// no need to store hash.
-        /*rule = (struct phx_app_rule*) g_hash_table_lookup(chain, &i);
-		if (rule != NULL)
-		{
-						
-		}*/
-		rule = (struct phx_app_rule*) values->data;		
-//		i = phx_apptable_hash(rule->direction, rule->srczone, rule->destzone);
-//		memcpy(buffer+position, &i, sizeof(i));
+   		rule = (struct phx_app_rule*) values->data;		
 		position += phx_rule_serialize(rule, buffer+position);
 		values = values->next;
     }
@@ -207,7 +184,6 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 		return NULL;
 	}
 	log_debug("Chain found, app='%s'\n", appname->str);
-//	guint64 hash = phx_apptable_hash(direction, pid, srczone, destzone);
 
 	struct phx_app_rule *rule;
 	if ( !(rule = phx_apptable_hash_lookup(chain, direction, pid, srczone, destzone) ) )
@@ -240,9 +216,6 @@ phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 	memcpy((char*)cdata->destip, (char*)payload + 16, 4);
 	memcpy((char*)cdata->srcip, (char*)payload + 12, 4);
 	cdata->direction = direction;
-	GString *kakukk = phx_write_ip(cdata->srcip);
-	log_debug("Extracted information, srcip='%s'\n", kakukk->str);
-	g_string_free(kakukk, TRUE);
 	return get_proc_from_conn(cdata, direction);
 }
 
@@ -256,6 +229,39 @@ int phx_extract_nfq_pkt_data(struct nfq_data *nfad, int* id, char** payload)
 	return len;
 }
 
+void phx_modify_conn_count(guint32 nfq_verdict, guint32 direction, guint32 pending)
+{
+	if (pending)
+	{
+		if (nfq_verdict == NF_ACCEPT || nfq_verdict == NF_DROP)
+		{
+			if (direction == INBOUND)
+			{
+				in_pending_count--;
+			}
+			else
+			{
+				pending_conn_count--;
+			}
+		}
+	}
+	else
+	{
+		if (nfq_verdict == NF_REPEAT)
+		{
+			if (direction == INBOUND)
+			{
+				in_pending_count++;
+			}
+			else
+			{
+				pending_conn_count++;
+			}
+		}
+		
+	}
+
+}
 
 int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UNUSED,
 	      struct nfq_data *nfad, void *data)
@@ -285,6 +291,8 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 	if (queue_num == 2 || queue_num == 3)
 		pending = 1;
 
+	log_debug("Callback info; pending='%d', direction='%d'\n", pending, direction);
+
 	// extracting connection data from payload
 	extr_res = phx_data_extract(payload, conndata, direction);
 	if (extr_res <= 0)
@@ -303,6 +311,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		g_string_free(sip,TRUE);
 		g_string_free(dip,TRUE);
 		phx_conn_data_unref(conndata);
+		phx_modify_conn_count(NF_DROP, direction, pending);
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
 				       (guchar*)payload);
 	}
@@ -348,6 +357,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
 			//This code is needed here, because i have to "jump over" the next DENY_CONN section
+			//pending_conn_count++;
 			mark = direction == OUTBOUND ? 0x2 : 0x1;
 			nfq_verdict = NF_REPEAT;
 		}
@@ -356,7 +366,6 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			log_debug
 			    ("Program %s found in list, denying for this time\n",
 			     conndata->proc_name->str);
-			pending_conn_count--;
 			rule->verdict = ASK;
 			if (direction == OUTBOUND)
 			{
@@ -389,6 +398,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		if (pending)
 		{
 			//no rule in pending queue, what should i do? pushing back doesn't hurt...
+			log_debug("No rule found in pending queue, hoping that pushing back doesn't hurt\n");
 			nfq_verdict = NF_QUEUE;
 		}
 		else
@@ -407,35 +417,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 	phx_conn_data_unref(conndata);
 
 	// increasing/decresing pending_conn_count, very hackish, need rework
-	if (pending)
-	{
-		if (nfq_verdict == NF_ACCEPT || nfq_verdict == NF_DROP)
-		{
-			if (direction == INBOUND)
-			{
-				in_pending_count--;
-			}
-			else
-			{
-				pending_conn_count--;
-			}
-		}
-	}
-	else
-	{
-		if (nfq_verdict == NF_REPEAT)
-		{
-			if (direction == INBOUND)
-			{
-				in_pending_count++;
-			}
-			else
-			{
-				pending_conn_count++;
-			}
-		}
-		
-	}
+	phx_modify_conn_count(nfq_verdict, direction, pending);
 
 	if (mark != 0)
 	{

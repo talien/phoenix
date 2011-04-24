@@ -84,13 +84,6 @@ def phx_client_unpack(sformat, data):
 
 def process_data(data):
 	(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name) = phx_client_unpack("SI4sI4sIIIISS",data)
-	message = ""
-	if (direction == 0):
-		message = "The program: '%s'\n wants to reach internet\n '%s' -> '%s'\ndo you accept?" % (process_name, sz_name, dz_name)
-	else:
-		message = "The program: '%s'\n wants to accept connections\n '%s' -> '%s'\ndo you accept?" % (process_name, sz_name, dz_name)
-#	dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_INFO, gtk.BUTTONS_YES_NO, message)
-#	resp = dialog.run()
 	dialog = ClientWindow(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name)
 	resp = dialog.run()
 	if (resp == gtk.RESPONSE_YES):

@@ -84,8 +84,6 @@ def parse_chain(data, position, zones):
 	chain = {}
 	appname = ""
 	for i in range(0,hashes):
-#		(hash_value,) = struct.unpack("I",data[position:position+4])
-#		position = position + 4
 		(appname, position, rule) = parse_rule(data,position, zones)
 		chain[i] = rule
 	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)

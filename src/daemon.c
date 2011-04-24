@@ -542,11 +542,12 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 	while (!end)
 	{
 		g_cond_wait(pending_cond, cond_mutex);
-		log_debug("Waking pending thread\n");
+		log_debug("Waking pending thread, out_pending_count='%d', in_pending_count='%d' \n",pending_conn_count, in_pending_count);
 		if (end) continue;
 		int i;
 
 		int ret;
+		int now_count;
 
 		polls[0].fd = out_pending_fd;
 		polls[0].events = POLLIN | POLLPRI;
@@ -560,7 +561,8 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 			if (((polls[0].revents & POLLIN)
 			     || (polls[0].revents & POLLPRI)))
 			{
-				for (i = 0; i < pending_conn_count; i++)
+				now_count = pending_conn_count;
+				for (i = 0; i < now_count; i++)
 				{
 					rv = recv(out_pending_fd, buf,
 						  sizeof(buf), MSG_DONTWAIT);
@@ -578,7 +580,8 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 			if (((polls[1].revents & POLLIN)
 			     || (polls[1].revents & POLLPRI)))
 			{
-				for (i = 0; i < in_pending_count; i++)
+				now_count = in_pending_count;
+				for (i = 0; i < now_count; i++)
 				{
 					rv = recv(in_pending_fd, buf,
 						  sizeof(buf), MSG_DONTWAIT);
@@ -694,7 +697,6 @@ int main(int argc, char **argv)
 	while (!end)
 	{
 		main_loop_iterate();
-//		sleep(0);
 	};
 	signal_pending();
 	
