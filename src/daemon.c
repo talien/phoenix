@@ -74,7 +74,7 @@ int parse_key_value(const char* line, char* key, char* value)
 	int invar1 = 0, invar2 = 0, wasvar1 = 0;
 	int j = 0, i;
 	value[0] = '\0';
-	for (i = 0; line[i] != '\0'; i++)
+	for (i = 0; (line[i] != '\0') && (i < 512) && (line[i] != '#'); i++)
 	{
 		if (!isspace(line[i]))
 		{
