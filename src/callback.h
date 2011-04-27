@@ -25,4 +25,5 @@ struct phx_app_rule* phx_apptable_lookup(GString* appname,guint pid,guint direct
 void phx_apptable_insert(struct phx_conn_data* cdata,int direction,int verdict, guint32 srczone, guint32 destzone);
 void phx_apptable_delete(struct phx_conn_data* cdata,int direction, guint32 srczone, guint32 destzone);
 char* phx_apptable_serialize(int* length);
+void phx_apptable_clear_invalid();
 #endif

@@ -80,7 +80,7 @@ TODO:
  - rule hash átgondolás: pid, userid, zonák, direction -> GString legyen itt is a hash... FÉLIG KÉSZ, guint64 a hash
  - zóna többszörös lookup (*-os zónákra lookupolni). KÉSZ
  - beépített zónák: local, internet
- - comment lehessen sor végén is
+ - comment lehessen sor végén is KÉSZ
  - zóna törlés control-on, zóna mentés control-on
  - input validáció control-on
  - rule editing -> add/delete átgondolás, merge

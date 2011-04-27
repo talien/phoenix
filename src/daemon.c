@@ -469,6 +469,15 @@ int process_gui_queue(struct phx_conn_data* resdata)
 	}
 }
 
+gpointer clear_invalid_rule_thread(gpointer data G_GNUC_UNUSED)
+{
+	while (1)
+	{
+		sleep(30);
+		log_debug("Clearing non-existent pids from rule table\n");
+		phx_apptable_clear_invalid();
+	}
+}
 
 gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
 {
@@ -661,6 +670,7 @@ void signal_quit(int signum G_GNUC_UNUSED)
 int main(int argc, char **argv)
 {
 
+	GThread* clear_thread;
 	log_debug("Opening netlink connections\n");
 
 	init_queue(&in_handle, &in_qhandle, &in_fd, phx_queue_callback, 1);
@@ -692,6 +702,7 @@ int main(int argc, char **argv)
 	gui_thread = g_thread_create(gui_ipc_thread, NULL, 1, NULL);
 	pending_thread = g_thread_create(pending_thread_run, NULL, 1, NULL);
 	control_thread = g_thread_create(daemon_socket_thread, NULL, 1, NULL);
+	clear_thread = g_thread_create(clear_invalid_rule_thread, NULL, 1, NULL);
 
     // some kind of "Main Loop"
 	while (!end)

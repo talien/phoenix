@@ -75,6 +75,32 @@ void phx_apptable_delete(struct phx_conn_data *cdata, int direction, guint32 src
 	g_mutex_unlock(apptable_lock);
 };
 
+gboolean phx_apptable_clear_inv_rule(gpointer key, gpointer value, gpointer user_data)
+{
+	struct phx_app_rule* rule = (struct phx_app_rule*) value;
+	if (rule->pid != 0)
+	{
+		return !check_pid_exists(rule->pid);
+	}
+	else
+	{
+		return FALSE;
+	}
+}
+
+void phx_apptable_clear_inv_app(gpointer key, gpointer value, gpointer user_data)
+{
+	GHashTable* chain = (GHashTable*) value;
+	g_hash_table_foreach_remove(chain, phx_apptable_clear_inv_rule, NULL);
+}
+
+void phx_apptable_clear_invalid()
+{
+	g_mutex_lock(apptable_lock);
+	g_hash_table_foreach(apptable, phx_apptable_clear_inv_app, NULL);
+	g_mutex_unlock(apptable_lock);
+}
+
 void phx_rule_count_size(gpointer key G_GNUC_UNUSED, gpointer value, gpointer user_data)
 {
 	//hash: int, pid:int, verdict:int, string_size:int, strng: char*, int srczone, int destzone
@@ -350,12 +376,26 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 				nfq_verdict = NF_DROP;
 			}
 		}
+		if (rule->verdict == WAIT_FOR_ANSWER)
+		{
+			log_debug("Program %s found in list, question to GUI already asked, sending to pending\n");
+			if (pending)
+			{
+				nfq_verdict = NF_REPEAT;
+				mark = direction == OUTBOUND ? 0x2 : 0x1;
+			}
+			else
+			{
+				nfq_verdict = NF_QUEUE;
+			}
+		}
 		if (rule->verdict == ASK)
 		{
 			log_debug("Program %s found in list, asking again\n",
 				  conndata->proc_name->str);
 			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
+			rule->verdict = WAIT_FOR_ANSWER;
 			//This code is needed here, because i have to "jump over" the next DENY_CONN section
 			//pending_conn_count++;
 			mark = direction == OUTBOUND ? 0x2 : 0x1;

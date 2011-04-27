@@ -1,5 +1,19 @@
 #include "sockproc.h"
 
+int
+check_pid_exists(int pid)
+{
+	char buf[16];
+	int res;
+	sprintf(buf,"/proc/%d",pid);
+	res = access(buf, F_OK);
+	if (res != 0)	
+	{
+		return FALSE;
+	}
+	return TRUE;
+}
+
 void
 parse_tcp_line (char *buf, char *s, char *d, unsigned int *sp,
 		unsigned int *dp, unsigned int *sn)

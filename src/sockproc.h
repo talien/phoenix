@@ -25,4 +25,5 @@ void parse_tcp_line(char* buf,char *s,char *d,unsigned int *sp,unsigned int *dp,
 void parse_tcp6_line(char* buf,char *s,char *d,unsigned int *sp,unsigned int *dp, unsigned int * sn);
 int get_proc_from_conn(struct phx_conn_data* c,int direction);
 int get_pid_from_sock(int socknum);
+int check_pid_exists(int pid);
 #endif

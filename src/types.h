@@ -11,6 +11,7 @@
 #define ACCEPT_CONN 5
 #define ACCEPT_INST 6
 #define ASK 7
+#define WAIT_FOR_ANSWER 8
 
 typedef struct phx_conn_data
 {

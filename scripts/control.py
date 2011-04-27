@@ -128,8 +128,8 @@ def populate_zone_store(liststore, zones):
 
 def populate_liststore(liststore, apptable):
 	for name,chain in apptable.iteritems():
-		for direction,rule in chain.iteritems():
-			liststore.append((name, rule.pid, direction%4, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
+		for i, rule in chain.iteritems():
+			liststore.append((name, rule.pid, rule.direction, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
 
 
 def zone_store_to_var(liststore, append_wildcard = False):
