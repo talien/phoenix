@@ -416,12 +416,13 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	}
 	log_debug("Got data from GUI on IPC, len:%d\n", recvd);
 	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone, &pid);
-	phx_apptable_delete(data, data->direction, data->srczone, data->destzone);
+//	phx_apptable_delete(data, data->direction, data->srczone, data->destzone);
 	data->state = verdict;
 	data->srczone = srczone;
 	data->destzone = destzone;
 	data->pid = pid;
-	phx_apptable_insert(data, data->direction, pid, srczone, destzone);
+//	phx_apptable_insert(data, data->direction, pid, srczone, destzone);
+	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
 	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d'\n", data->state, data->srczone, data->destzone);
 	close(s);
 	return data;

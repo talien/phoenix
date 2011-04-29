@@ -28,7 +28,7 @@ typedef struct phx_conn_data
    guint32 destzone;
 } phx_conn_data;
 
-struct phx_app_rule
+typedef struct phx_app_rule
 {
   GString* appname;
   guint32 pid;
@@ -36,7 +36,7 @@ struct phx_app_rule
   guint32 direction;
   guint32 srczone;
   guint32 destzone;
-};
+} phx_app_rule;
 
 phx_conn_data* phx_conn_data_new();
 void phx_conn_data_ref(phx_conn_data* cdata);
