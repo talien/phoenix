@@ -1,3 +1,4 @@
+#define _PHX_DAEMON_C
 #include <sys/un.h>
 #include "serialize.h"
 #include <libnetfilter_queue/libnetfilter_queue.h>
@@ -347,12 +348,19 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 {
 	int dlen = phx_serialize_data(data, phx_buf);
-
+	phx_app_rule* rule;
 	int s, len;
 	guint32 verdict, srczone, destzone, pid;
 
 	struct sockaddr_un remote;
 
+	log_debug("Looking up rule before sending to GUI socket\n");
+	rule = phx_apptable_lookup(data->proc_name, data->pid, data->direction, data->srczone, data->destzone);
+	if (( rule == NULL) || (rule != NULL && (rule->verdict == ACCEPTED || rule->verdict == DENIED)))
+	{
+		log_debug("No need for asking verdict on GUI, already has a matching rule with decision\n");
+		return NULL;
+	}
 	if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
 	{
 		log_debug("Error creating socket to client\n");
@@ -423,7 +431,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	data->pid = pid;
 //	phx_apptable_insert(data, data->direction, pid, srczone, destzone);
 	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
-	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d'\n", data->state, data->srczone, data->destzone);
+	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d', pid='%d'\n", data->state, data->srczone, data->destzone, data->pid);
 	close(s);
 	return data;
 }
@@ -488,7 +496,7 @@ gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
 		log_debug("Waiting for data in gui_ipc_thread\n");
 		struct phx_conn_data *data = g_async_queue_pop(to_gui);
 
-		send_conn_data(data);
+		data = send_conn_data(data);
 
 		log_debug("Starting to process gui queue\n");
 		process_gui_queue(data);

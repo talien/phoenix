@@ -160,7 +160,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		}
 		if (rule->verdict == WAIT_FOR_ANSWER)
 		{
-			log_debug("Program %s found in list, question to GUI already asked, sending to pending\n");
+			log_debug("Program %s found in list, question to GUI already asked, sending to pending\n", conndata->proc_name->str);
 			if (pending)
 			{
 				nfq_verdict = NF_REPEAT;

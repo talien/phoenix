@@ -3,7 +3,18 @@
 #include <stdio.h>
 #include <glib.h>
 
-#define log_debug(...) _log_trace(__PRETTY_FUNCTION__, __FILE__, __LINE__, __VA_ARGS__)
+#define PHX_LOG_ERROR 1
+#define PHX_LOG_WARNING 2
+#define PHX_LOG_OPERATIONAL 3
+#define PHX_LOG_DEBUG 4
+
+#ifdef _PHX_DAEMON_C
+int debug_level = PHX_LOG_DEBUG;
+#else
+extern int debug_level;
+#endif
+
+#define log_debug(...) if (debug_level == PHX_LOG_DEBUG) _log_trace(__PRETTY_FUNCTION__, __FILE__, __LINE__, __VA_ARGS__)
 
 void write_ip(unsigned char* buffer);
 void swrite_ip(unsigned char* buffer,char* out, int buflen);

@@ -249,17 +249,18 @@ gboolean phx_apptable_merge_rule_foreach(gpointer key, gpointer value, gpointer 
 	gboolean covered = TRUE;
 	if ((chain_rule->verdict == ACCEPTED) || (chain_rule->verdict == DENIED))
 	{
-		covered &= chain_rule->verdict == rule->verdict;
+		covered &= (chain_rule->verdict == rule->verdict);
 	}
 	covered &= ( (chain_rule->pid == rule->pid) || (rule->pid == 0) );
 	covered &= ( (chain_rule->destzone == rule->destzone) || (rule->destzone == 0) );
 	covered &= ( (chain_rule->srczone == rule->srczone) || (rule->srczone == 0) );
+	log_debug("Rule coverage, covered='%d', pid='%d', verdict='%d', srczone='%d', destzone='%d' \n", covered, chain_rule->pid, chain_rule->verdict, chain_rule->srczone, chain_rule->destzone);
     return covered;
 };
 
 void phx_apptable_merge_rule(GString* appname, guint32 direction, guint32 pid, guint32 srczone, guint32 destzone, guint32 verdict)
 {
-	log_debug("Merging rule, appname='%s', pid='%d', verdict='%d'\n", appname->str, pid, verdict);
+	log_debug("Merging rule, appname='%s', pid='%d', verdict='%d' srczone='%d', destzone='%d' \n", appname->str, pid, verdict, srczone, destzone);
 	phx_apptable_lock_write();
 	GHashTable* chain = (GHashTable*) g_hash_table_lookup(apptable, appname->str);
 	phx_app_rule* rule = g_new0(phx_app_rule,1);
@@ -268,7 +269,7 @@ void phx_apptable_merge_rule(GString* appname, guint32 direction, guint32 pid, g
 	rule->direction = direction;
 	rule->srczone = srczone;
 	rule->destzone = destzone;
-	g_hash_table_foreach_remove(apptable, phx_apptable_merge_rule_foreach, rule);
+	g_hash_table_foreach_remove(chain, phx_apptable_merge_rule_foreach, rule);
  	guint64 *hash = g_new0(guint64, 1);
 	*hash = phx_apptable_hash(rule->direction, rule->pid, rule->srczone, rule->destzone);
 	g_hash_table_insert(chain, hash, rule);	
