@@ -375,7 +375,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 
 	if (uname == NULL)
 	{
-		log_debug("Cannot determine process user, assuming root\n");
+		log_warning("Cannot determine process user, assuming root\n");
 		uname = g_string_new("root");
 	}
 
@@ -396,7 +396,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1)
 	{
-		log_debug("Connection failed to client socket:%s!\n",
+		log_warning("Connection failed to client socket:%s!\n",
 			  uname->str);
 
 		data->state = DENY_CONN;
@@ -408,7 +408,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	log_debug("Sending %d bytes of data to GUI\n", dlen);
 	if (send(s, phx_buf, dlen, 0) == -1)
 	{
-		log_debug("Error sending to GUI IPC socket\n");
+		log_warning("Error sending to GUI IPC socket\n");
 
 		data->state = DENY_CONN;
 		close(s);
@@ -418,7 +418,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 
 	if ((recvd = recv(s, phx_buf, sizeof(phx_buf), 0)) <= 0)
 	{
-		log_debug("Error receiving from GUI IPC socket\n");
+		log_warning("Error receiving from GUI IPC socket\n");
 		data->state = DENY_CONN;
 		close(s);
 		return data;
@@ -705,7 +705,7 @@ int main(int argc, char **argv)
 
 	if (!parse_config(NULL))
 	{
-		log_debug("Error occured during parsing config, exiting!\n");
+		log_error("Error occured during parsing config, exiting!\n");
 		goto exit;
 	}
 

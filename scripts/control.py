@@ -3,8 +3,24 @@
 import os,sys,socket, struct
 import gtk
 
+change_store = []
+
+dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
+verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
+
+apptable = {}
+
+class Config:
+	def __init__(self):
+		self.apptable = {}
+		self.zones = {}
+		self.liststore = gtk.ListStore(str, int, int,int, int,str, int,str)
+		self.zonestore = gtk.ListStore(int, str, str)
+		self.change_store = []
+
+
 class Rule:
-	def __init__(self, appname, pid, direction, verdict, src_zone_id, source_zone, dst_zone_id, dest_zone):
+	def __init__(self, appname = "", pid = 0, direction = 0, verdict = 0, src_zone_id = 0, source_zone = "*", dst_zone_id = 0, dest_zone = "*"):
 		self.pid = pid
 		self.verdict = verdict
 		self.appname = appname
@@ -13,6 +29,22 @@ class Rule:
 		self.src_zone_id = src_zone_id
 		self.dst_zone_id = dst_zone_id
 		self.direction = direction
+
+	def __eq__(self, other):
+		return ((self.pid == other.pid) and
+				(self.verdict == other.verdict) and
+				(self.appname == other.appname) and
+				(self.source_zone == other.source_zone) and
+				(self.dest_zone == other.dest_zone) and
+				(self.src_zone_id == other.src_zone_id) and
+				(self.dst_zone_id == other.dst_zone_id) and
+				(self.direction == other.direction))
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
+	def __str__(self):
+		return "Name: %s, pid:%d, direction:%d, verdict:%d, src_zone_id:%d, dst_zone_id:%d" % (self.appname, self.pid, self.direction, self.verdict, self.src_zone_id, self.dst_zone_id)
 
 def phx_client_unpack(sformat, data):
     i = 0
@@ -66,7 +98,6 @@ def phx_client_pack(sformat, data):
 		i += 1
 	return result
 
-#def phx_hash_value(direction, pid, srczone, destzone)
 
 def parse_rule(data, position, zones):
 	print "Data: %r, position:%d" % (data,position)
@@ -81,11 +112,11 @@ def parse_chain(data, position, zones):
 	print "Parsing chain, position='%d'" % position
 	(hashes,) = struct.unpack("I",data[position:position+4])
 	position = position + 4
-	chain = {}
+	chain = []
 	appname = ""
 	for i in range(0,hashes):
 		(appname, position, rule) = parse_rule(data,position, zones)
-		chain[i] = rule
+		chain.append(rule)
 	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
 	return (appname, position, chain)
 
@@ -126,9 +157,66 @@ def populate_zone_store(liststore, zones):
 		if zoneid != 0:
 			liststore.append((zoneid, zonename, network))
 
-def populate_liststore(liststore, apptable):
-	for name,chain in apptable.iteritems():
-		for i, rule in chain.iteritems():
+def refresh_liststore(liststore, papptable, changes):
+	print "Refreshing liststore, papptable_len:%d" % len(papptable)
+	liststore.clear()
+	new_table = apptable_merge_changes(papptable, changes)
+	print "new_table length: %d" % len(new_table)
+	populate_liststore(liststore, new_table)
+
+def apptable_dump(papptable):
+	print "===="
+	print "Dumping apptable, chain_num='%d'" % len(papptable)
+	for name, chain in papptable.iteritems():
+		print "Dumping chain, name='%s', chain_items='%d'" % (name,len(chain))
+		for rule in chain:
+			print "Rule, rule='%s'" % rule
+	print "===="
+
+def apptable_delete_rule(papptable, rule):
+	#note: delete chain if become empty
+	print "Deleting rule, %s" % rule
+	chain = papptable[rule.appname]
+	i = 0
+	for crule in chain:
+		if (rule == crule):
+			print "deleting rule chain:%s id:%d" % (rule.appname, i)
+			print "Deleted rule: %s" % crule
+			chain.remove(crule)
+		i += 1
+
+def apptable_add_rule(papptable, rule):
+	print "Adding rule, %s" % rule
+	if rule.appname in papptable:
+		chain = papptable[rule.appname]
+		chain.append(rule)		
+	else:
+		chain = []
+		chain.append(rule)
+		papptable[rule.appname] = chain
+			
+def apptable_copy(papptable):
+	new_table = {}
+	print "Copying apptable, chains:%d" % len(papptable)
+	for name, chain in papptable.iteritems():
+		new_table[name] = list(chain)
+	return new_table
+
+def apptable_merge_changes(papptable, changes):
+	new_table = apptable_copy(papptable)
+	print "merge_changes, new_table_len:%d" % len(new_table)
+	for (ctype,rule) in changes:
+		print "%s" % ctype
+		apptable_dump(new_table)
+		if (ctype == "DELETE"):
+			apptable_delete_rule(new_table, rule)
+		if (ctype == "ADD"):
+			apptable_add_rule(new_table, rule)
+	return new_table
+
+def populate_liststore(liststore, papptable):
+	for name,chain in papptable.iteritems():
+		for rule in chain:
 			liststore.append((name, rule.pid, rule.direction, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
 
 
@@ -182,6 +270,7 @@ def get_first_free_zone_id(liststore):
 class RuleEditWindow(gtk.Window):
 	def fill_zones(self, combobox, zonestore, active):
 		zones = zone_store_to_var(zonestore, True)
+		self.zones = zones
 		index = 0
 		act_ind = 0
 		for zoneid, (zonename, network) in zones.iteritems():
@@ -191,12 +280,20 @@ class RuleEditWindow(gtk.Window):
 			index += 1
 		combobox.set_active(act_ind)
 
-	def __init__(self, riter, zonestore, rulestore):
+	def __init__(self, riter, cfg):
 		gtk.Window.__init__(self)
 		layout = gtk.Fixed()
+		rulestore = cfg.liststore
+		self.mode = ""
+		self.rule = None
+		if (riter == None):
+			self.mode = "ADD"
+			self.rule = Rule()
+		else:
+			self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
+			self.mode = "EDIT"		
 
-		self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
-		
+		self.cfg = cfg
 		layout.put(gtk.Label("Application name"), 10, 10) 
 		layout.put(gtk.Label("Application pid"), 10, 40)
 		layout.put(gtk.Label("Direction"), 10, 70)
@@ -219,11 +316,11 @@ class RuleEditWindow(gtk.Window):
 		layout.put(self.dir_entry, 150, 67)
 
 		self.src_zone_entry = gtk.combo_box_new_text()
-		self.fill_zones(self.src_zone_entry, zonestore, self.rule.source_zone)
+		self.fill_zones(self.src_zone_entry, self.cfg.zonestore, self.rule.source_zone)
 		layout.put(self.src_zone_entry, 150, 97)
 
 		self.dst_zone_entry = gtk.combo_box_new_text()
-		self.fill_zones(self.dst_zone_entry, zonestore, self.rule.dest_zone)
+		self.fill_zones(self.dst_zone_entry, self.cfg.zonestore, self.rule.dest_zone)
 		layout.put(self.dst_zone_entry, 150, 127)
 
 		self.verdict_entry = gtk.combo_box_new_text()
@@ -239,15 +336,40 @@ class RuleEditWindow(gtk.Window):
 		cancelbutton = gtk.Button("Cancel")
 		layout.put(cancelbutton, 10, 250)
 
+		okbutton = gtk.Button("Ok")
+		layout.put(okbutton, 200, 250)
+
+
 		cancelbutton.connect("clicked", self.cancel_button_clicked, None)
+		okbutton.connect("clicked", self.ok_button_clicked, None)
 
 		self.resize(350,300)
 		self.add(layout)
 		self.show_all()
 
+	def create_rule(self):
+		pid = int(self.pid_entry.get_text())
+		direction = dir_const[self.dir_entry.get_active_text()]
+		verdict = verdict_const[self.verdict_entry.get_active_text()]
+		src_zid = get_zone_id_from_name(self.src_zone_entry.get_active_text(), self.zones)
+		dst_zid = get_zone_id_from_name(self.dst_zone_entry.get_active_text(), self.zones)
+		result = Rule(self.name_entry.get_text(), pid, direction, verdict, src_zid, self.src_zone_entry.get_active_text(), dst_zid, self.dst_zone_entry.get_active_text())
+		return result
+
 	def cancel_button_clicked(self, widget, data = None):
 		self.destroy()
 		
+	def ok_button_clicked(self, widget, data = None):
+		rule = self.create_rule()
+		if self.mode == "ADD":
+			change_store.append(("ADD", rule))
+			refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
+		else:
+			if rule != self.rule:
+				change_store.append(("DELETE", self.rule))
+				change_store.append(("ADD",rule))
+				refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
+		self.destroy()
 
 class ZoneEditWindow(gtk.Window):
 	def __init__(self, ziter, liststore):
@@ -298,15 +420,13 @@ class ZoneEditWindow(gtk.Window):
 class MainWindow(gtk.Window):
 
 
-	def __init__(self,apptable,zones):
+	def __init__(self,cfg):
 		gtk.Window.__init__(self)
-		self.zones = zones
-		self.liststore = gtk.ListStore(str, int, int,int, int,str, int,str)
-		self.zonestore = gtk.ListStore(int, str, str)
-		populate_liststore(self.liststore, apptable)
-		populate_zone_store(self.zonestore, zones)
-		self.treeview = gtk.TreeView(self.liststore)
-		self.zoneview = gtk.TreeView(self.zonestore)
+		self.cfg = cfg
+		refresh_liststore(cfg.liststore, cfg.apptable, cfg.change_store)
+		populate_zone_store(cfg.zonestore, cfg.zones)
+		self.treeview = gtk.TreeView(cfg.liststore)
+		self.zoneview = gtk.TreeView(cfg.zonestore)
 
 		vbox = gtk.VBox(False, 0)
 
@@ -327,12 +447,18 @@ class MainWindow(gtk.Window):
 
 		self.resize(400,400)
 
+		rulebuttons = gtk.HBox(False, 0)
+
 		rule_edit = gtk.Button("Edit rule...")
+		rule_add = gtk.Button("Add...")
+		rulebuttons.pack_start(rule_add)
+		rulebuttons.pack_start(rule_edit)
 
 		rule_box.pack_start(self.treeview)
-		rule_box.pack_start(rule_edit)
+		rule_box.pack_start(rulebuttons)
 
 		rule_edit.connect("clicked", self.rule_edit_clicked, None)
+		rule_add.connect("clicked", self.rule_add_clicked, None)
 
 		zonebuttons = gtk.HBox(False, 0)
 		
@@ -360,8 +486,8 @@ class MainWindow(gtk.Window):
 		self.show_all()
 
 	def zone_commit_clicked(self, widget, data = None):
-		self.zones = zone_store_to_var(self.zonestore)
-		test = pack_zones(self.zones)
+		self.zones = zone_store_to_var(self.cfg.zonestore)
+		test = pack_zones(self.cfg.zones)
 		print "Zone pack test '%r'" % test
 		data = send_command("SZN"+test);
 
@@ -370,7 +496,11 @@ class MainWindow(gtk.Window):
 		if (ziter == None):
 			print "No selection"
 			return
-		win = ZoneEditWindow(ziter, self.zonestore)
+		win = ZoneEditWindow(ziter, self.cfg.zonestore)
+		win.show()
+
+	def rule_add_clicked(self, widget, data = None):
+		win = RuleEditWindow(None, self.cfg)
 		win.show()
 
 	def rule_edit_clicked(self, widget, data = None):
@@ -378,11 +508,11 @@ class MainWindow(gtk.Window):
 		if (riter == None):
 			print "No selection"
 			return
-		win = RuleEditWindow(riter, self.zonestore, self.liststore)
+		win = RuleEditWindow(riter, self.cfg)
 		win.show()
 
 	def zone_add_clicked(self, widget, data = None):
-		win = ZoneEditWindow(None, self.zonestore)
+		win = ZoneEditWindow(None, self.cfg.zonestore)
 		win.show()
 
 	def destroy(self, widget, data = None):
@@ -390,11 +520,12 @@ class MainWindow(gtk.Window):
 		return False
 	
 def main():
+	cfg = Config()
 	data = send_command("GZN");
-	zones = parse_zones(data)
+	cfg.zones = parse_zones(data)
 	data = send_command("GET");
-	apptable = parse_apptable(data, zones);
-	window = MainWindow(apptable, zones)
+	cfg.apptable = parse_apptable(data, cfg.zones);
+	window = MainWindow(cfg)
 	gtk.main()
 	
 main()
