@@ -10,9 +10,21 @@
 #include <sys/time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <syslog.h>
+#include "config.h"
 
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
+};
+
+void phx_init_log()
+{
+	openlog("phoenix", 0, LOG_DAEMON);
+};
+
+void phx_close_log()
+{
+	closelog();
 };
 
 void
@@ -37,7 +49,7 @@ log_debug (gchar * format, ...)
 }
 
 void
-_log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
+_log_trace( int debug, gchar* function, gchar* file, int line, gchar* format, ...)
 {
     va_list l;
     gchar msgbuf[2048];
@@ -51,7 +63,13 @@ _log_trace( gchar* function, gchar* file, int line, gchar* format, ...)
     
     va_start (l, format);
     g_vsnprintf (msgbuf, sizeof (msgbuf), format, l);
-    printf ("[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
+	switch (global_cfg->logging_mode)
+	{
+		case PHX_CFG_LOG_SYSLOG: syslog(LOG_INFO, "%s", msgbuf);
+								 break;
+		case PHX_CFG_LOG_STDERR: printf ("[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
+								 break;
+	};
     va_end (l);
 }
 

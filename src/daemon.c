@@ -23,6 +23,7 @@
 #include "callback.h"
 #include "serialize.h"
 #include "zones.h"
+#include "config.h"
 
 struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle,
     *out_pending_qhandle;
@@ -680,7 +681,9 @@ int main(int argc, char **argv)
 {
 
 	GThread* clear_thread;
+	phx_init_config(&argc, &argv);
 	log_debug("Opening netlink connections\n");
+	log_error("phoenix firewall starting up\n");
 
 	init_queue(&in_handle, &in_qhandle, &in_fd, phx_queue_callback, 1);
 	init_queue(&out_handle, &out_qhandle, &out_fd, phx_queue_callback, 0);
@@ -700,7 +703,7 @@ int main(int argc, char **argv)
 
 	phx_apptable_init();
 
-	if (!parse_config((argc == 2) ? argv[1] : NULL))
+	if (!parse_config(NULL))
 	{
 		log_debug("Error occured during parsing config, exiting!\n");
 		goto exit;
@@ -713,6 +716,7 @@ int main(int argc, char **argv)
 	control_thread = g_thread_create(daemon_socket_thread, NULL, 1, NULL);
 	clear_thread = g_thread_create(clear_invalid_rule_thread, NULL, 1, NULL);
 
+	log_error("phoenix firewall started up\n");
     // some kind of "Main Loop"
 	while (!end)
 	{
@@ -735,6 +739,8 @@ exit:
 	g_cond_free(pending_cond);
 
 	g_async_queue_unref(to_gui);
+
+	log_error("phoenix firewall exited\n");
 
 	return 0;
 

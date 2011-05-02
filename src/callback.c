@@ -109,11 +109,11 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		GString *dip = phx_write_ip((char*)conndata->destip);
 		if (direction == OUTBOUND)
 		{
-			log_debug("Connection timeouted, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", sip->str, conndata->sport, dip->str, conndata->dport);
+			log_operation("Connection timeouted, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", sip->str, conndata->sport, dip->str, conndata->dport);
 		}
 		else
 		{
-			log_debug("Nothing listens on port %d, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", conndata->dport, sip->str, conndata->sport, dip->str, conndata->dport);
+			log_operation("Nothing listens on port %d, dropping packet, srcip='%s', srcport='%d', destip='%s', destport='%d' \n", conndata->dport, sip->str, conndata->sport, dip->str, conndata->dport);
 
 		}
 		g_string_free(sip,TRUE);
@@ -123,6 +123,23 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		return nfq_set_verdict(qh, id, NF_DROP, pkt_len,
 				       (guchar*)payload);
 	}
+	if (!pending)
+	{
+		GString *sip = phx_write_ip((char*)conndata->srcip);
+		GString *dip = phx_write_ip((char*)conndata->destip);
+
+		if (direction == OUTBOUND)
+		{
+			log_operation("Handling outgoing connection, srcip='%s', srcport='%d', destip='%s', destport='%d', program='%s' \n", sip->str, conndata->sport, dip->str, conndata->dport, conndata->proc_name->str);
+		}
+		else
+		{
+			log_operation("Handling incoming connection, srcip='%s', srcport='%d', destip='%s', destport='%d', program='%s' \n", sip->str, conndata->sport, dip->str, conndata->dport, conndata->proc_name->str);
+		}
+		g_string_free(sip,TRUE);
+		g_string_free(dip,TRUE);
+	}
+
 	
 	//zone lookup
 	srczone = zone_lookup(zones, conndata->srcip);
