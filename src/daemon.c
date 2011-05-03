@@ -324,6 +324,12 @@ void control_handle_query(int sock)
 	 	phx_deserialize_zones(command+3, hs_len - 3, &zones);
 		send(sock,"ACK",4,0);
 	}
+	else if (!strncmp(command,"SET",3))
+	{
+		log_debug("Rule setting request got, len='%d'\n", hs_len-3);
+		phx_update_rules(command+3, hs_len - 3);
+		send(sock,"ACK",4,0);
+	}
 	close(sock);
 	
 }

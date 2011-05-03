@@ -98,6 +98,21 @@ def phx_client_pack(sformat, data):
 		i += 1
 	return result
 
+def phx_serialize_rule(rule):
+	return phx_client_pack("SIIIII", (rule.appname, rule.pid, rule.direction, rule.verdict, rule.src_zone_id, rule.dst_zone_id))
+
+def phx_serialize_changes(changelist):
+	list_len = len(changelist)
+	result = phx_client_pack("I",(list_len,))
+	for (mode,rule) in changelist:
+		int_mode = 0
+		if (mode == "ADD"):
+			int_mode = 0
+		else:
+			int_mode = 1
+		result += phx_client_pack("I",(int_mode,))
+		result += phx_serialize_rule(rule)
+	return result
 
 def parse_rule(data, position, zones):
 	print "Data: %r, position:%d" % (data,position)
@@ -451,14 +466,17 @@ class MainWindow(gtk.Window):
 
 		rule_edit = gtk.Button("Edit rule...")
 		rule_add = gtk.Button("Add...")
+		rule_commit = gtk.Button("Commit!")
 		rulebuttons.pack_start(rule_add)
 		rulebuttons.pack_start(rule_edit)
+		rulebuttons.pack_start(rule_commit)
 
 		rule_box.pack_start(self.treeview)
 		rule_box.pack_start(rulebuttons)
 
 		rule_edit.connect("clicked", self.rule_edit_clicked, None)
 		rule_add.connect("clicked", self.rule_add_clicked, None)
+		rule_commit.connect("clicked", self.rule_commit_clicked, None)
 
 		zonebuttons = gtk.HBox(False, 0)
 		
@@ -510,6 +528,11 @@ class MainWindow(gtk.Window):
 			return
 		win = RuleEditWindow(riter, self.cfg)
 		win.show()
+
+	def rule_commit_clicked(self, widget, data = None):
+		data = phx_serialize_changes(change_store)
+		print "Data serialized %r" % data
+		send_command("SET"+data)
 
 	def zone_add_clicked(self, widget, data = None):
 		win = ZoneEditWindow(None, self.cfg.zonestore)

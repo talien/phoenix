@@ -202,6 +202,17 @@ char* phx_apptable_serialize(int* length)
 	return result;
 }
 
+phx_app_rule* phx_rule_deserialize(char* buffer, int* len)
+{
+	int rlen;
+	phx_app_rule *rule = g_new0(phx_app_rule,1);
+	rule->appname = g_string_new("");
+	rlen = phx_unpack_data("Siiiii",buffer,rule->appname, &rule->pid, &rule->direction, &rule->verdict, &rule->srczone, &rule->destzone, NULL);
+	log_debug("Rule deserialized, len='%d'\n", rlen);
+	*len = rlen;
+	return rule;
+}
+
 struct phx_app_rule *phx_apptable_hash_lookup(GHashTable* chain, int direction, int pid, guint32 srczone, guint32 destzone)
 {
 	struct phx_app_rule* rule;
@@ -276,4 +287,21 @@ void phx_apptable_merge_rule(GString* appname, guint32 direction, guint32 pid, g
 	phx_apptable_unlock_write();
 }
 
+void phx_update_rules(char* buffer, int length)
+{
+	int position = 0, mode, chain_num;
+	int len;
+	phx_app_rule* rule;
+	position += phx_unpack_data("i",buffer, &chain_num, NULL);
+	log_debug("Updating rules, rule_num='%d'\n", chain_num);
+	while (position < length)
+	{
+		position += phx_unpack_data("i", buffer+position, &mode, NULL);
+		rule = phx_rule_deserialize(buffer + position, &len);
+		log_debug("Change request got, mode='%d', position='%d', len='%d' \n",mode,position,len);
+		position += len;
+		g_string_free(rule->appname, TRUE);
+		g_free(rule);
+	}
+}
 
