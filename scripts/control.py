@@ -443,7 +443,7 @@ class MainWindow(gtk.Window):
 		self.treeview = gtk.TreeView(cfg.liststore)
 		self.zoneview = gtk.TreeView(cfg.zonestore)
 
-		vbox = gtk.VBox(False, 0)
+		notebook = gtk.Notebook()
 
 		rule_box = gtk.VBox(False, 0)
 
@@ -470,9 +470,10 @@ class MainWindow(gtk.Window):
 		rulebuttons.pack_start(rule_add)
 		rulebuttons.pack_start(rule_edit)
 		rulebuttons.pack_start(rule_commit)
+		rulebuttons.set_size_request(-1, 50);
 
 		rule_box.pack_start(self.treeview)
-		rule_box.pack_start(rulebuttons)
+		rule_box.pack_start(rulebuttons,0,0)
 
 		rule_edit.connect("clicked", self.rule_edit_clicked, None)
 		rule_add.connect("clicked", self.rule_add_clicked, None)
@@ -480,27 +481,28 @@ class MainWindow(gtk.Window):
 
 		zonebuttons = gtk.HBox(False, 0)
 		
-		zone_commit_button = gtk.Button("Commit")
+		zone_commit_button = gtk.Button("Commit!")
 		zone_edit_button = gtk.Button("Edit zone...")
 		zone_add_button = gtk.Button("Add zone...");
-		
+
 		zonebuttons.pack_start(zone_add_button)
 		zonebuttons.pack_start(zone_edit_button)
 		zonebuttons.pack_start(zone_commit_button)
-			
+		zonebuttons.set_size_request(-1,50)
+
 		zone_box = gtk.VBox(False,0)
 
 		zone_box.pack_start(self.zoneview)
-		zone_box.pack_end(zonebuttons)
+		zone_box.pack_end(zonebuttons,0,0)
 
-		vbox.pack_start(rule_box, True, True, 0)
-		vbox.pack_end(zone_box, True, True, 0)
+		notebook.append_page(rule_box,gtk.Label('Rules'))
+		notebook.append_page(zone_box,gtk.Label('Zones'))
 
 		zone_add_button.connect("clicked", self.zone_add_clicked, None)
 		zone_edit_button.connect("clicked", self.zone_edit_clicked, None)
 		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
 
-		self.add(vbox)
+		self.add(notebook)
 		self.show_all()
 
 	def zone_commit_clicked(self, widget, data = None):
