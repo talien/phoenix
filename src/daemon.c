@@ -352,6 +352,26 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 	close(daemon_socket);
 }
 
+GString* resolv_user_alias(GString* username)
+{
+	GString *result, *star;
+	result = g_hash_table_lookup(aliases, username);
+	if (result == NULL)
+	{
+	
+		star = g_string_new("*");
+		result = g_hash_table_lookup(aliases, star);
+		g_string_free(star, TRUE);
+		if (result == NULL)
+		{
+			return g_string_new(username->str);
+		}
+	}
+	log_debug("Resolving user alias from %s to %s\n", username->str, result->str);
+	return g_string_new(result->str);
+
+}
+
 struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 {
 	int dlen = phx_serialize_data(data, phx_buf);
@@ -386,19 +406,11 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	}
 
 	//lookup username in aliases
-	aname = g_hash_table_lookup(aliases, uname);
-	if (aname == NULL)
-	{
-		uname = g_string_prepend(uname, "phxsock-");
-	}
-	else
-	{
-		aname = g_string_new(aname->str);
-		log_debug("Resolving user alias from %s to %s\n", uname->str, aname->str);
-		g_string_free(uname, TRUE);
-		uname = g_string_prepend(aname, "phxsock-");
-	}
-	strcpy(remote.sun_path, uname->str);
+	aname = resolv_user_alias(uname);
+	g_string_free(uname, TRUE);
+	aname = g_string_prepend(aname, "phxsock-");
+
+	strcpy(remote.sun_path, aname->str);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
 	if (connect(s, (struct sockaddr *)&remote, len) == -1)
 	{
@@ -410,7 +422,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 		g_string_free(uname, TRUE);
 		return data;
 	}
-	g_string_free(uname, TRUE);
+	g_string_free(aname, TRUE);
 	log_debug("Sending %d bytes of data to GUI\n", dlen);
 	if (send(s, phx_buf, dlen, 0) == -1)
 	{
