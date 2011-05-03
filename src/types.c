@@ -18,6 +18,8 @@ void phx_conn_data_ref(phx_conn_data* cdata)
 void phx_conn_data_unref(phx_conn_data* cdata)
 {
 //	log_debug("Unrefing conndata, proc_name='%s'\n", cdata->proc_name->str);
+	if (!cdata )
+		return;
 	cdata->refcnt = cdata->refcnt - 1;
 	if (cdata->refcnt == 0)
 	{

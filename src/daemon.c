@@ -193,20 +193,22 @@ int parse_config(const char* filename)
 			if (rule)
 			{
 				log_debug("Inserting rule\n");
-				phx_apptable_insert(rule, direction, verdict, 0, 0);
+				phx_apptable_insert(rule->proc_name, rule->pid, direction, verdict, 0, 0);
 			}
 			if (!strncmp(var1, "rule", 128))
 			{
-				rule = g_new0(struct phx_conn_data, 1);
+				rule = phx_conn_data_new();
 				state = PHX_STATE_RULE;
 			}
 			if (!strncmp(var1, "zones", 128))
 			{
+				phx_conn_data_unref(rule);
 				rule = NULL;
 				state = PHX_STATE_ZONE;
 			}	
 			if (!strncmp(var1, "alias", 128))
 			{
+				phx_conn_data_unref(rule);
 				rule = NULL;
 				state = PHX_STATE_ALIAS;	
 			}
@@ -264,7 +266,8 @@ int parse_config(const char* filename)
 	if (rule)
 	{
 		log_debug("Inserting rule\n");
-		phx_apptable_insert(rule, direction, verdict, 0, 0);
+		phx_apptable_insert(rule->proc_name, rule->pid, direction, verdict, 0, 0);
+		phx_conn_data_unref(rule);
 	}
 	fclose(conffile);
 	return TRUE;
@@ -483,8 +486,9 @@ int process_gui_queue(struct phx_conn_data* resdata)
 		}
 		else
 		{
+			//FIXME: This should be a bug!!! Or in a result of simutneous client GUI decision and control modifying.
 			log_debug("Unknown app found, adding to hashtable, name='%s', direction='%d', state='%d'\n",resdata->proc_name->str, resdata->direction, resdata->state);
-			phx_apptable_insert(resdata, resdata->direction, resdata->state, resdata->srczone, resdata->destzone);
+			phx_apptable_insert(resdata->proc_name, resdata->pid, resdata->direction, resdata->state, resdata->srczone, resdata->destzone);
 			
 		}
 		phx_conn_data_unref(resdata);

@@ -245,7 +245,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			// no rule in non-pending queue, creating one and pushing to queue
 			log_debug("No rule found, inserting a new one for program, program='%s'\n",conndata->proc_name->str);
 			phx_conn_data_ref(conndata);
-			phx_apptable_insert(conndata, direction, NEW, srczone, dstzone);
+			phx_apptable_insert(conndata->proc_name, conndata->pid, direction, NEW, srczone, dstzone);
 			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
 			//sending to pending queue

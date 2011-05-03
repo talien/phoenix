@@ -42,12 +42,12 @@ guint64 phx_apptable_hash(guint32 direction, guint32 pid, guint32 srczone, guint
 }
 
 void
-phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, guint32 srczone, guint32 destzone)
+phx_apptable_insert(GString* appname, guint32 pid, int direction, int verdict, guint32 srczone, guint32 destzone)
 {
 	struct phx_app_rule *rule = g_new0(struct phx_app_rule, 1);
 
-	rule->appname = g_string_new(cdata->proc_name->str);
-	rule->pid = cdata->pid;
+	rule->appname = g_string_new(appname->str);
+	rule->pid = pid;
 	rule->verdict = verdict;
 	rule->srczone = srczone;
 	rule->destzone = destzone;
@@ -57,7 +57,7 @@ phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, gui
 	*hash = phx_apptable_hash(rule->direction, rule->pid, rule->srczone, rule->destzone);
 	phx_apptable_lock_write();
 	GHashTable *chain =
-	    g_hash_table_lookup(apptable, cdata->proc_name->str);
+	    g_hash_table_lookup(apptable, appname->str);
 
 	if (!chain)
 	{
@@ -71,16 +71,16 @@ phx_apptable_insert(struct phx_conn_data *cdata, int direction, int verdict, gui
 	phx_apptable_unlock_write();
 };
 
-void phx_apptable_delete(struct phx_conn_data *cdata, int direction, guint32 srczone, guint32 destzone)
+void phx_apptable_delete(GString* appname, guint32 pid, int direction, guint32 srczone, guint32 destzone)
 {
 	phx_apptable_lock_write();
-	GHashTable *chain = g_hash_table_lookup(apptable, cdata->proc_name->str);
+	GHashTable *chain = g_hash_table_lookup(apptable, appname->str);
 	if (!chain)
 	{
 		g_mutex_unlock(apptable_lock);
 		return;
 	}
-	guint64 hash = phx_apptable_hash(direction, cdata->pid, srczone, destzone);
+	guint64 hash = phx_apptable_hash(direction, pid, srczone, destzone);
 	struct phx_app_rule* rule = g_hash_table_lookup(chain, &hash);
 	if (!rule)
 	{
@@ -274,6 +274,12 @@ void phx_apptable_merge_rule(GString* appname, guint32 direction, guint32 pid, g
 	log_debug("Merging rule, appname='%s', pid='%d', verdict='%d' srczone='%d', destzone='%d' \n", appname->str, pid, verdict, srczone, destzone);
 	phx_apptable_lock_write();
 	GHashTable* chain = (GHashTable*) g_hash_table_lookup(apptable, appname->str);
+	if (chain == NULL)
+	{
+		phx_apptable_unlock_write();
+		phx_apptable_insert(appname, pid, direction, verdict, srczone, destzone);
+		return;
+	}
 	phx_app_rule* rule = g_new0(phx_app_rule,1);
 	rule->appname = g_string_new(appname->str);
 	rule->pid = pid;
@@ -300,6 +306,15 @@ void phx_update_rules(char* buffer, int length)
 		rule = phx_rule_deserialize(buffer + position, &len);
 		log_debug("Change request got, mode='%d', position='%d', len='%d' \n",mode,position,len);
 		position += len;
+		switch (mode) 
+		{
+			case 0: // ADD
+					phx_apptable_merge_rule(rule->appname, rule->direction, rule->pid, rule->srczone, rule->destzone, rule->verdict);
+					break;
+			case 1: // DELETE
+					phx_apptable_delete(rule->appname, rule->pid, rule->direction, rule->srczone, rule->destzone);
+					break;
+		}
 		g_string_free(rule->appname, TRUE);
 		g_free(rule);
 	}
