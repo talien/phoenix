@@ -483,10 +483,12 @@ class MainWindow(gtk.Window):
 		
 		zone_commit_button = gtk.Button("Commit!")
 		zone_edit_button = gtk.Button("Edit zone...")
-		zone_add_button = gtk.Button("Add zone...");
+		zone_add_button = gtk.Button("Add zone...")
+		zone_delete_button = gtk.Button("Delete zone")
 
 		zonebuttons.pack_start(zone_add_button)
 		zonebuttons.pack_start(zone_edit_button)
+		zonebuttons.pack_start(zone_delete_button)
 		zonebuttons.pack_start(zone_commit_button)
 		zonebuttons.set_size_request(-1,50)
 
@@ -501,6 +503,7 @@ class MainWindow(gtk.Window):
 		zone_add_button.connect("clicked", self.zone_add_clicked, None)
 		zone_edit_button.connect("clicked", self.zone_edit_clicked, None)
 		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
+		zone_delete_button.connect("clicked", self.zone_delete_clicked, None)
 
 		self.add(notebook)
 		self.show_all()
@@ -518,6 +521,17 @@ class MainWindow(gtk.Window):
 			return
 		win = ZoneEditWindow(ziter, self.cfg.zonestore)
 		win.show()
+
+	def zone_delete_clicked(self,widget, data = None):
+		(model, ziter) = self.zoneview.get_selection().get_selected()
+		if (ziter == None):
+			return
+		zonename = self.cfg.zonestore.get_value(ziter, 1)
+		dialog = gtk.MessageDialog(self, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK_CANCEL, "Are you sure you want to delete zone %s?" % zonename)
+		response = dialog.run()
+		dialog.destroy()
+		if (response == gtk.RESPONSE_OK):
+			self.cfg.zonestore.remove(ziter)			
 
 	def rule_add_clicked(self, widget, data = None):
 		win = RuleEditWindow(None, self.cfg)
