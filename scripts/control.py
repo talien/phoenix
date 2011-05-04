@@ -467,8 +467,11 @@ class MainWindow(gtk.Window):
 		rule_edit = gtk.Button("Edit rule...")
 		rule_add = gtk.Button("Add...")
 		rule_commit = gtk.Button("Commit!")
+		rule_delete = gtk.Button("Delete")
+
 		rulebuttons.pack_start(rule_add)
 		rulebuttons.pack_start(rule_edit)
+		rulebuttons.pack_start(rule_delete)
 		rulebuttons.pack_start(rule_commit)
 		rulebuttons.set_size_request(-1, 50);
 
@@ -477,6 +480,7 @@ class MainWindow(gtk.Window):
 
 		rule_edit.connect("clicked", self.rule_edit_clicked, None)
 		rule_add.connect("clicked", self.rule_add_clicked, None)
+		rule_delete.connect("clicked", self.rule_delete_clicked, None)
 		rule_commit.connect("clicked", self.rule_commit_clicked, None)
 
 		zonebuttons = gtk.HBox(False, 0)
@@ -544,6 +548,13 @@ class MainWindow(gtk.Window):
 			return
 		win = RuleEditWindow(riter, self.cfg)
 		win.show()
+
+	def rule_delete_clicked(self, widget, data = None):
+		(model, riter) = self.treeview.get_selection().get_selected()
+		rulestore = self.cfg.liststore
+		self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
+		change_store.append(("DELETE", self.rule))
+		refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
 
 	def rule_commit_clicked(self, widget, data = None):
 		data = phx_serialize_changes(change_store)
