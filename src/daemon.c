@@ -725,7 +725,7 @@ int main(int argc, char **argv)
 
 	phx_apptable_init();
 
-	if (!parse_config(NULL))
+	if (!parse_config(global_cfg->conf_file))
 	{
 		log_error("Error occured during parsing config, exiting!\n");
 		goto exit;

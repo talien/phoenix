@@ -10,6 +10,7 @@ static gboolean lstderr = FALSE;
 static gint loglevel = -1;
 static gboolean core = FALSE;
 static gboolean version = FALSE;
+static gchar* filename = NULL;
 
 
 static GOptionEntry entries[] = 
@@ -18,7 +19,8 @@ static GOptionEntry entries[] =
   {	"stderr", 'e', 0, G_OPTION_ARG_NONE, &lstderr, "Log to stderr", NULL },
   {	"loglevel", 'v', 0, G_OPTION_ARG_INT, &loglevel, "Log level, level=D", "D" },
   { "version", 'V', 0, G_OPTION_ARG_NONE, &version, "Printing version and exiting", NULL },
-  { "enable-core", NULL, 0, G_OPTION_ARG_NONE, &core, "Enabling core dumps", NULL },
+  { "enable-core", 0, 0, G_OPTION_ARG_NONE, &core, "Enabling core dumps", NULL },
+  { "conffile",'f', 0, G_OPTION_ARG_FILENAME, &filename,  "Configuration file name", "filename"},
   { NULL }
 };
 
@@ -55,9 +57,14 @@ void phx_parse_command_line(int* argc, char*** argv)
 		global_cfg->logging_mode = PHX_CFG_LOG_STDERR;
 	}
 	if (loglevel > -1)
+	{
 		global_cfg->debug_level = loglevel;
 	}
-
+	if (filename)
+	{
+		global_cfg->conf_file = filename;
+	}
+}
 void phx_init_config(int* argc, char*** argv)
 {
 	global_cfg = g_new0(phx_config,1);

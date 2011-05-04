@@ -12,6 +12,7 @@ typedef struct phx_config
 	int debug_level;
 	int logging_mode;
 	int enable_core;
+	gchar* conf_file;
 } phx_config;
 
 #ifdef _PHX_CONFIG_C
