@@ -418,11 +418,11 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	if (connect(s, (struct sockaddr *)&remote, len) == -1)
 	{
 		log_warning("Connection failed to client socket:%s!\n",
-			  uname->str);
+			  aname->str);
 
 		data->state = DENY_CONN;
 		close(s);
-		g_string_free(uname, TRUE);
+		g_string_free(aname, TRUE);
 		return data;
 	}
 	g_string_free(aname, TRUE);

@@ -12,12 +12,22 @@ class ClientWindow(gtk.Dialog):
 		self.sz_id = sz_name;
 		self.dz_id = dz_name;
 		
+		source_ip = "%d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )
+		dest_ip = "%d.%d.%d.%d" % (ord(destip[0]), ord(destip[1]), ord(destip[2]), ord(destip[3]) )
+		try:
+			source_dns_name = socket.gethostbyaddr(source_ip)[0];
+		except:
+			source_dns_name = source_ip
+		try:
+			dest_dns_name = socket.gethostbyaddr(dest_ip)[0];
+		except:
+			dest_dns_name = dest_ip
 		layout = gtk.Fixed()
 		layout.put(gtk.Label("The program %s with the following parameters want to reach the internet:" % process_name),10,10);
 		layout.put(gtk.Label("Process ID:%d" % pid),10,35);
-		layout.put(gtk.Label("Source IP: %d.%d.%d.%d" % (ord(srcip[0]), ord(srcip[1]), ord(srcip[2]), ord(srcip[3]) )),10,60)
+		layout.put(gtk.Label("Source IP: %s (%s)" % (source_ip,source_dns_name)),10,60)
 		layout.put(gtk.Label("Source port: %d" % sport ),10,85)
-		layout.put(gtk.Label("Destination IP: %d.%d.%d.%d" % (ord(destip[0]), ord(destip[1]), ord(destip[2]), ord(destip[3]) )),10,110)
+		layout.put(gtk.Label("Destination IP: %s (%s)" % (dest_ip, dest_dns_name)),10,110)
 		layout.put(gtk.Label("Destination port: %d" % dport ),10,135)
 		layout.put(gtk.Label("Source zone: %s" % src_zone), 10, 160)
 		layout.put(gtk.Label("Destination zone: %s" % dest_zone), 10,185)
