@@ -7,6 +7,7 @@ change_store = []
 
 dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
 verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
+verdict_dir = { 0 : "NEW", 1: "ACCEPTED", 2: "DENIED", 3 : "DENY_CONN", 5 : "ACCEPT_CONN", 7 : "ASK", 8 : "WAIT_FOR_ANSWER" }
 
 apptable = {}
 
@@ -265,11 +266,14 @@ def get_zone_id_from_name(zname, zones):
 	#hmm, perhaps i should use some *normal* error handling? (exceptions)
 	return -1
 
-def create_cell(treeview, column_name = "Column", column_text = 0):
+def create_cell(treeview, column_name = "Column", column_text = 0, render_func = None):
 	cell = gtk.CellRendererText()
 	col = gtk.TreeViewColumn( column_name )
 	col.pack_start(cell, True)
-	col.set_attributes(cell,text=column_text)
+	if (render_func == None):
+		col.set_attributes(cell,text=column_text)
+	else:
+		col.set_cell_data_func(cell, render_func, None)
 	treeview.append_column(col)
 
 def get_first_free_zone_id(liststore):
@@ -443,14 +447,17 @@ class MainWindow(gtk.Window):
 		self.treeview = gtk.TreeView(cfg.liststore)
 		self.zoneview = gtk.TreeView(cfg.zonestore)
 
+		main_box = gtk.VBox(False,0)
+
 		notebook = gtk.Notebook()
 
 		rule_box = gtk.VBox(False, 0)
 
 		create_cell(self.treeview, "Program", 0)
-		create_cell(self.treeview, "Direction", 2)
+		create_cell(self.treeview, "Direction", 2, self.direction_renderer_func)
+		
 		create_cell(self.treeview, "Pid", 1)
-		create_cell(self.treeview, "Verdict", 3)
+		create_cell(self.treeview, "Verdict", 3, self.verdict_renderer_func)
 		create_cell(self.treeview, "Source zone", 5)
 		create_cell(self.treeview, "Destination zone", 7)
 
@@ -509,8 +516,48 @@ class MainWindow(gtk.Window):
 		zone_commit_button.connect("clicked", self.zone_commit_clicked, None)
 		zone_delete_button.connect("clicked", self.zone_delete_clicked, None)
 
-		self.add(notebook)
+		menubar = self.create_menu()
+		menubar.show()
+
+		main_box.pack_start(menubar, False, False, 2)
+		main_box.pack_start(notebook)
+
+		self.add(main_box)
 		self.show_all()
+
+
+	def create_menu(self):
+		menu_bar = gtk.MenuBar()
+		file_menu = gtk.Menu()
+		quit_item = gtk.MenuItem("Quit")
+		file_menu.append(quit_item)
+		quit_item.connect_object("activate", self.destroy, "file.quit")
+		quit_item.show()
+		file_item = gtk.MenuItem("File")
+		file_item.show()
+		file_item.set_submenu(file_menu)
+		menu_bar.append(file_item)
+		return menu_bar	
+
+	def direction_renderer_func(self, column, cell_renderer, tree_model, titer, userdata = None):
+		val = tree_model.get_value(titer, 2)
+		if (val == 0):
+			cell_renderer.set_property('text', "Outbound")
+		else:
+			cell_renderer.set_property('text', "Inbound")
+
+
+	def verdict_renderer_func(self, column, cell_renderer, tree_mode, titer, userdata = None):
+		val = tree_mode.get_value(titer, 3)
+		cell_renderer.set_property('text', verdict_dir[val])
+
+	def direction_renderer_func(self, column, cell_renderer, tree_model, titer, userdata = None):
+		val = tree_model.get_value(titer, 2)
+		if (val == 0):
+			cell_renderer.set_property('text', "Outbound")
+		else:
+			cell_renderer.set_property('text', "Inbound")
+
 
 	def zone_commit_clicked(self, widget, data = None):
 		self.zones = zone_store_to_var(self.cfg.zonestore)
