@@ -103,48 +103,6 @@ get_val_from_hex (char hex)
     return -1;
 }
 
-
-void
-dumphex (unsigned char *buffer, int len)
-{
-    int k = 0;
-
-    printf ("0: ");
-    while (k < len)
-    {
-		printf ("%c", hex[buffer[k] / 16]);
-		printf ("%c ", hex[buffer[k] % 16]);
-		k++;
-		if ((k % 4) == 0)
-		{
-			if (k < len)
-			{
-				printf ("\n %d:", k / 4);
-
-			}
-			else
-			{
-				printf ("\n");
-			}
-
-		}
-    }
-
-}
-
-void
-dumpascii (unsigned char *buffer, int len)
-{
-    int k = 0;
-
-    while (k < len)
-    {
-		printf ("%c", buffer[k]);
-		k++;
-    }
-    printf ("\n");
-}
-
 GString *
 get_user (guint32 pid)
 {
@@ -165,7 +123,6 @@ get_user (guint32 pid)
     int uid;
 
     sscanf (buf, "%*s %d %*d %*d %*d", &uid);
-//  printf("uid: %d\n",uid);
     struct passwd *pass = getpwuid (uid);
 
     fclose (statf);
