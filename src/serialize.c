@@ -108,7 +108,7 @@ int phx_unpack_data(const char* format, char* buffer, ...)
 
 };
 
-int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
+int serialize_zone_recursive(char* buffer, radix_bit* zones, char* ip, int level)
 {
 	int size1 = 0, size2 = 0, size3 = 0;
 	GString* network;
@@ -116,9 +116,9 @@ int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
 	{
 		level = level + 1;
 		ip[level / 8] = ip[level / 8] & ~bin[7 - (level % 8)];
-		size1 = phx_rec_zone(buffer, zones->zero, ip, level);
+		size1 = serialize_zone_recursive(buffer, zones->zero, ip, level);
 		ip[level / 8] = ip[level / 8] | bin[7 - (level % 8)];
-		size2 = phx_rec_zone(buffer+size1, zones->one, ip, level);
+		size2 = serialize_zone_recursive(buffer+size1, zones->one, ip, level);
 		ip[level / 8] = ip[level / 8] & ~bin[7 - level % 8];
 		level = level - 1;
 		if (zones->zoneid != 0)
@@ -139,7 +139,7 @@ int phx_serialize_zones(char* buffer, radix_bit* zones)
 {
 	int buffer_length;
 	char* ip = g_new0(char,4);
-	buffer_length = phx_rec_zone(buffer, zones, ip, -1);
+	buffer_length = serialize_zone_recursive(buffer, zones, ip, -1);
 	log_debug("Zones serialized, length = '%d'\n", buffer_length);
 	g_free(ip);
 	return buffer_length;

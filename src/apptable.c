@@ -3,36 +3,34 @@
 #include "zones.h"
 
 GHashTable *apptable;
-GMutex *apptable_lock;
 
-//can we somehow avoid extern?
-extern radix_bit* zones;
-extern GString* zone_names[256];
+GStaticRWLock apptable_lock = G_STATIC_RW_LOCK_INIT;
 
 void phx_apptable_lock_read()
 {
-	g_mutex_lock(apptable_lock);
+	g_static_rw_lock_reader_lock(&apptable_lock);
 }
 
 void phx_apptable_unlock_read()
 {
-	g_mutex_unlock(apptable_lock);
+	g_static_rw_lock_reader_unlock(&apptable_lock);
+
 }
 
 void phx_apptable_lock_write()
 {
-	g_mutex_lock(apptable_lock);
+	g_static_rw_lock_writer_lock(&apptable_lock);
+
 }
 
 void phx_apptable_unlock_write()
 {
-	g_mutex_unlock(apptable_lock);
+	g_static_rw_lock_writer_unlock(&apptable_lock);
 }
 
 void phx_apptable_init()
 {
 	apptable = g_hash_table_new(g_str_hash, g_str_equal);
-	apptable_lock = g_mutex_new();
 }
 
 guint64 phx_apptable_hash(guint32 direction, guint32 pid, guint32 srczone, guint32 destzone)
@@ -77,14 +75,14 @@ void phx_apptable_delete(GString* appname, guint32 pid, int direction, guint32 s
 	GHashTable *chain = g_hash_table_lookup(apptable, appname->str);
 	if (!chain)
 	{
-		g_mutex_unlock(apptable_lock);
+		phx_apptable_unlock_write();
 		return;
 	}
 	guint64 hash = phx_apptable_hash(direction, pid, srczone, destzone);
 	struct phx_app_rule* rule = g_hash_table_lookup(chain, &hash);
 	if (!rule)
 	{
-		g_mutex_unlock(apptable_lock);
+		phx_apptable_unlock_write();
 		return;
 	}
 	g_hash_table_remove(chain, &hash);
@@ -233,7 +231,7 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 	if (!chain)
 	{
 		log_debug("Chain not found for app: app='%s'\n", appname->str);
-		g_mutex_unlock(apptable_lock);
+		phx_apptable_unlock_read();
 		return NULL;
 	}
 	log_debug("Chain found, app='%s'\n", appname->str);
