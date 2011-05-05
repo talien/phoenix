@@ -13,6 +13,9 @@
 #define ASK 7
 #define WAIT_FOR_ANSWER 8
 
+#define OUTBOUND 0
+#define INBOUND 1
+
 typedef struct phx_conn_data
 {
    GString* proc_name;

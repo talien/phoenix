@@ -25,5 +25,6 @@ typedef struct phx_config
 #endif
 
 void phx_init_config(int* argc, char*** argv);
+int phx_parse_config(const char* filename);
 
 #endif

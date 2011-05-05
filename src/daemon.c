@@ -32,223 +32,6 @@ GMutex *cond_mutex;
 
 int end = 0;
 
-#define PHX_STATE_RULE 1
-#define PHX_STATE_ZONE 2
-#define PHX_STATE_ALIAS 3
-
-char get_first_char(const char* line)
-{
-    int i = 0;	
-	for (i = 0; isspace(line[i]) && line[i] != '\0'; i++)
-	{
-		
-	}
-	return line[i];
-}
-
-int parse_key_value(const char* line, char* key, char* value)
-{
-	//FIXME: watch for buffer overflows, limit key/value/line len.
-	int invar1 = 0, invar2 = 0, wasvar1 = 0;
-	int j = 0, i;
-	value[0] = '\0';
-	for (i = 0; (line[i] != '\0') && (i < 512) && (line[i] != '#'); i++)
-	{
-		if (!isspace(line[i]))
-		{
-			if ((!invar1) && (!invar2) && (!wasvar1)
-				&& (line[i] != '['))
-			{
-				invar1 = 1;
-				j = 0;
-			}
-			if ((!invar1) && (!invar2) && (wasvar1))
-			{
-				invar2 = 1;
-				j = 0;
-			}
-			if ((line[i] == '='))
-			{
-				invar1 = 0;
-				wasvar1 = 1;
-				key[j] = '\0';
-			}
-			if (invar1)
-			{
-				key[j] = line[i];
-				j++;
-			}
-			if (invar2)
-			{
-				value[j] = line[i];
-				j++;
-			}
-		}
-	}		
-	if (invar2)
-	{
-		value[j] = '\0';
-	}
-	
-	if (!invar2 && !wasvar1)
-	{
-		return FALSE;
-	}
-	else
-	{
-		return TRUE;
-	}
-
-}
-
-int parse_section(const char* line, char* section)
-{
-	int invar1 = 0, wasvar1 = 0;
-	int j = 0, i;
-	section[0] = '\0';
-	for (i = 0; line[i] != '\0'; i++)
-	{
-		if (!isspace(line[i]))
-		{
-			if ((line[i] == '['))
-			{
-				invar1 = 1;
-				j = 0;
-			}
-			if ((line[i] == ']'))
-			{
-				invar1 = 0;
-				wasvar1 = 1;
-				section[j] = '\0';
-			}
-			if (invar1 && line[i] != '[')
-			{
-				section[j] = line[i];
-				j++;
-			}
-		}
-	}
-	if (!wasvar1)
-		return FALSE;
-	return TRUE;
-
-}
-
-int parse_config(const char* filename)
-{
-	char fbuf[512], var1[128], var2[128];
-
-	struct phx_conn_data *rule = 0;
-	int verdict, direction = OUTBOUND;
-	int state = 0;
-	int zoneid = 1;
-	guchar buf[4];
-	guint32 mask;	
-	FILE* conffile;
-	global_cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
-
-	if (filename == NULL)
-	{
-		conffile = fopen("phx.conf", "r");
-	}
-	else
-	{
-		conffile = fopen(filename, "r");
-	}
-
-	global_cfg->zones = g_new0(radix_bit, 1);
-	if (!conffile)
-		return FALSE;
-
-	while (fgets(fbuf, sizeof(fbuf), conffile) != NULL)
-	{
-		if (get_first_char(fbuf) == '[')
-		{
-			parse_section(fbuf, var1);
-			log_debug("Conf section: section='%s'\n", var1);
-			if (rule)
-			{
-				log_debug("Inserting rule\n");
-				phx_apptable_insert(rule->proc_name, rule->pid, direction, verdict, 0, 0);
-			}
-			if (!strncmp(var1, "rule", 128))
-			{
-				rule = phx_conn_data_new();
-				state = PHX_STATE_RULE;
-			}
-			if (!strncmp(var1, "zones", 128))
-			{
-				phx_conn_data_unref(rule);
-				rule = NULL;
-				state = PHX_STATE_ZONE;
-			}	
-			if (!strncmp(var1, "alias", 128))
-			{
-				phx_conn_data_unref(rule);
-				rule = NULL;
-				state = PHX_STATE_ALIAS;	
-			}
-		}
-		else if (get_first_char(fbuf) == '#')
-		{
-			log_debug("Comment found\n");
-			continue;
-		}
-		else if (get_first_char(fbuf) == '\0')
-		{
-			continue;
-		}
-		else 
-		{
-			parse_key_value(fbuf, var1, var2);
-			log_debug("Variable1: %s Variable2:%s state='%d' \n", var1, var2, state);
-			if (state == PHX_STATE_RULE)
-			{
-				if (!strncmp(var1, "program", 128))
-				{
-					rule->proc_name = g_string_new(var2);
-					rule->pid = 0;
-				}
-				if (!strncmp(var1, "verdict", 128))
-				{
-					if (!strncmp(var2, "deny", 128))
-					{
-						verdict = DENIED;
-					}
-					if (!strncmp(var2, "accept", 128))
-					{
-						verdict = ACCEPTED;
-					}
-				}
-			}
-			else if (state == PHX_STATE_ZONE)
-			{
-				log_debug("Adding zone: name='%s', network='%s', zoneid='%d' \n", var1, var2, zoneid);
-				parse_network(var2, buf, &mask);
-				zone_add(global_cfg->zones, buf, mask, zoneid);
-				global_cfg->zone_names[zoneid] = g_string_new(var1);
-				zoneid += 1;
-			}
-			else if (state == PHX_STATE_ALIAS)
-			{
-				log_debug("Adding alias: name='%s', alias='%s' \n",var1, var2);
-				GString *name, *alias;
-				name = g_string_new(var1);
-				alias = g_string_new(var2);
-				g_hash_table_insert(global_cfg->aliases, name, alias);
-			}
-		}
-	}
-	if (rule)
-	{
-		log_debug("Inserting rule\n");
-		phx_apptable_insert(rule->proc_name, rule->pid, direction, verdict, 0, 0);
-		phx_conn_data_unref(rule);
-	}
-	fclose(conffile);
-	return TRUE;
-}
-
 int init_daemon_socket()
 {
 	struct sockaddr_un local;
@@ -261,13 +44,13 @@ int init_daemon_socket()
 	unlink(local.sun_path);
 	if (bind(daemon_socket, (struct sockaddr *)&local, len) == -1)
 	{
-		perror("Error on binding daemon socket");
-		exit(1);
+		log_error("Error on binding daemon socket");
+		return -1;
 	}
 	if (listen(daemon_socket, 5) == -1)
 	{
-		perror("Error on listening daemon socket");
-		exit(1);
+		log_error("Error on listening daemon socket");
+		return -1;
 	}
 	return daemon_socket;
 
@@ -322,6 +105,8 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 	socklen_t rsock_len;
 	daemon_socket = init_daemon_socket();
 	log_debug("Starting daemon control socket thread\n");
+	if (daemon_socket == -1)
+		return -1;
 	while (1)
 	{
 		remote_sock = accept(daemon_socket, (struct sockaddr*)&remote, &rsock_len);
@@ -623,7 +408,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 /* initializing netlink queues
 4 queues - 2 onbound, 2 outbound (normal+pending per direction)
 pendign queues are for packets, which hasn't been confirmed from gui */
-void
+int
 init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,
 	   int *fd, nfq_callback * cb, int queue_num)
 {
@@ -633,42 +418,44 @@ init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,
 	(*handle) = nfq_open();
 	if (!(*handle))
 	{
-		perror("Error occured during opening queue");
-		exit(1);
+		log_error("Error occured during opening netfilter queue");
+		return -1;
 	}
 	if (nfq_unbind_pf((*handle), AF_INET) < 0)
 	{
-		perror("Unbinding, ignoring error");
-		/*exit(1); */
+		log_error("Unbinding, ignoring error");
+		return -1;
 	}
 	log_debug("Binding protocol\n");
 	if (nfq_bind_pf((*handle), AF_INET) < 0)
 	{
-		perror("Binding");
-		exit(1);
+		log_error("Error in nf_queue binding");
+		return -1;
 	}
-	log_debug("Creating queue\n");
+	log_debug("Creating netfilter queue\n");
 	(*qhandle) = nfq_create_queue((*handle), queue_num, cb, data);
 	if (!(*qhandle))
 	{
-		perror("Creating queue");
-		exit(1);
+		log_error("Error in creating queue");
+		return -1;
 	}
-	log_debug("Setting mode\n");
+	log_debug("Setting mode for netfilter queue\n");
 	if (nfq_set_mode((*qhandle), NFQNL_COPY_PACKET, 0) < 0)
 	{
-		perror("Error setting queue mode");
+		log_error("Error setting netfilter queue mode");
+		return -1;
 	}
 	(*fd) = nfq_fd((*handle));
-	log_debug("Fd: %d\n", (*fd));
+	log_debug("Netfilter queue fd; fd='%d'\n", (*fd));
+	return 0;
 
 }
 
 void close_queue(struct nfq_handle *handle, struct nfq_q_handle *qhandle)
 {
-	log_debug("Destroy queue\n");
+	log_debug("Destroying netfilter queue\n");
 	nfq_destroy_queue(qhandle);
-	log_debug("Destroy handle\n");
+	log_debug("Destroy netfilter handle\n");
 	nfq_close(handle);
 }
 
@@ -681,8 +468,8 @@ int main(int argc, char **argv)
 {
 	GThread *gui_thread, *pending_thread, *control_thread, *clear_thread;
 	phx_init_config(&argc, &argv);
-	log_debug("Opening netlink connections\n");
 	log_error("phoenix firewall starting up\n");
+	log_debug("Opening netlink connections\n");
 
 	init_queue(&qdata.in_handle, &qdata.in_qhandle, &qdata.in_fd, phx_queue_callback, 1);
 	init_queue(&qdata.out_handle, &qdata.out_qhandle, &qdata.out_fd, phx_queue_callback, 0);
@@ -690,6 +477,8 @@ int main(int argc, char **argv)
 		   phx_queue_callback, 3);
 	init_queue(&qdata.in_pending_handle, &qdata.in_pending_qhandle, &qdata.in_pending_fd,
 		   phx_queue_callback, 2);
+
+	log_debug("Netlink connections opened\n");
 
 	signal(SIGTERM, signal_quit);
 	signal(SIGINT, signal_quit);
@@ -702,13 +491,15 @@ int main(int argc, char **argv)
 
 	phx_apptable_init();
 
-	if (!parse_config(global_cfg->conf_file))
+	log_warning("Parsing configuration\n");
+
+	if (!phx_parse_config(global_cfg->conf_file))
 	{
 		log_error("Error occured during parsing config, exiting!\n");
 		goto exit;
 	}
 
-	log_debug("Starting threads\n");
+	log_warning("Starting threads\n");
 
 	gui_thread = g_thread_create(gui_ipc_thread, NULL, 1, NULL);
 	pending_thread = g_thread_create(pending_thread_run, NULL, 1, NULL);

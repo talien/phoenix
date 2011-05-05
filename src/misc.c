@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <glib.h>
 #include <unistd.h>
-#include <pwd.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
@@ -101,33 +100,6 @@ get_val_from_hex (char hex)
 		return (int) hex - 55;
     }
     return -1;
-}
-
-GString *
-get_user (guint32 pid)
-{
-    char buf[1024];
-
-    sprintf (buf, "/proc/%d/status", pid);
-    FILE *statf = fopen (buf, "r");
-
-    if (statf == NULL)
-		return NULL;
-    int i = 0;
-
-    while (i < 7)
-    {
-		fgets (buf, sizeof (buf), statf);
-		i++;
-    }
-    int uid;
-
-    sscanf (buf, "%*s %d %*d %*d %*d", &uid);
-    struct passwd *pass = getpwuid (uid);
-
-    fclose (statf);
-    GString* result = g_string_new (pass->pw_name);
-	return result;
 }
 
 GString *

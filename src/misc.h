@@ -15,12 +15,12 @@
 #define log_operation(...) if (global_cfg->debug_level >= PHX_LOG_OPERATIONAL) _log_trace(global_cfg->debug_level,__PRETTY_FUNCTION__, __FILE__, __LINE__, __VA_ARGS__)
 
 int get_val_from_hex(char hex);
-GString* get_user(guint32 pid);
 GString* phx_write_ip(char ip[4]);
 GString* phx_dns_lookup(char ip[4]);
 int parse_network(const char* str, guchar* nw, guint32 *mask);
 void _log_trace(int debug,  const char* function, const char* file, int line, gchar* format, ...);
 void phx_init_log();
 void phx_close_log();
+
 
 #endif

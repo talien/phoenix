@@ -82,3 +82,8 @@ void zone_free(radix_bit* zone_tree)
 		g_free(zone_tree);
 	}
 }
+
+radix_bit* zone_new()
+{
+	return g_new0(radix_bit, 1);
+}
