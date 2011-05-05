@@ -5,14 +5,13 @@
 #include "zones.h"
 #include "data.h"
 
-extern GString* zone_names[256];
 extern guchar bin[8];
 
 int
 phx_serialize_data (struct phx_conn_data *data, char *buffer)
 {
 	return phx_pack_data("Si4ci4ciiiiSS", buffer, data->proc_name, &data->pid, data->srcip, &data->sport, data->destip, &data->dport, &data->direction, &data->srczone, &data->destzone, 
-			zone_names[data->srczone], zone_names[data->destzone], NULL);
+			global_cfg->zone_names[data->srczone], global_cfg->zone_names[data->destzone], NULL);
 }
 
 void phx_deserialize_data(char* buffer, guint32* verdict, guint32* srczone, guint32* destzone, guint32* pid)
@@ -127,7 +126,7 @@ int phx_rec_zone(char* buffer, radix_bit* zones, char* ip, int level)
 			log_debug("Zone found at depth %d, zone_id='%d', ip='%d.%d.%d.%d'\n", level + 1, zones->zoneid,(guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3]);
 			network = g_string_new("");
 			g_string_printf(network, "%d.%d.%d.%d/%d", (guchar)ip[0], (guchar)ip[1], (guchar)ip[2], (guchar)ip[3], level + 1);
-			size3 = phx_pack_data("SiS",buffer+size1+size2+4,zone_names[zones->zoneid], &zones->zoneid, network, NULL);
+			size3 = phx_pack_data("SiS",buffer+size1+size2+4,global_cfg->zone_names[zones->zoneid], &zones->zoneid, network, NULL);
 			phx_pack_data("i",buffer+size1+size2, &size3, NULL);
 			size3 += 4;
 			g_string_free(network, TRUE);
@@ -173,11 +172,11 @@ int phx_deserialize_zones(char* buffer, int len, radix_bit** zones)
 	*zones = zone;
 	for (i = 0; i < 256; i++)
 	{
-		if (zone_names[i] != NULL)
+		if (global_cfg->zone_names[i] != NULL)
 		{
-			g_string_free(zone_names[i], TRUE);
+			g_string_free(global_cfg->zone_names[i], TRUE);
 		}
-		zone_names[i] = names[i];
+		global_cfg->zone_names[i] = names[i];
 	}
 	g_mutex_unlock(zone_mutex);
 	zone_free(oldzone);

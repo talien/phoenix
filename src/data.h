@@ -9,9 +9,30 @@
 
 #ifndef _PHX_DATA_H
 #define _PHX_DATA_H
-extern struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
+typedef struct nf_queue_data
+{
+   struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle, *out_pending_qhandle;
+   struct nfq_handle *in_handle, *out_handle, *in_pending_handle, *out_pending_handle;
+   int out_fd, in_fd, in_pending_fd, out_pending_fd;
+
+} nf_queue_data;
+
+#ifdef _PHX_DAEMON_C
+
+nf_queue_data qdata;
+GAsyncQueue *to_gui;
+int pending_conn_count = 0;
+int in_pending_count = 0;
+GMutex* zone_mutex;
+
+#else
+
+extern nf_queue_data qdata;
 extern GAsyncQueue *to_gui;
 extern int pending_conn_count;
 extern int in_pending_count;
 extern GMutex* zone_mutex;
+
+#endif
+
 #endif

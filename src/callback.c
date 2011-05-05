@@ -5,9 +5,6 @@
 #include "serialize.h"
 #include "apptable.h"
 
-extern radix_bit* zones;
-extern GString* zone_names[256];
-
 int
 phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 		 int direction)
@@ -142,13 +139,13 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 
 	
 	//zone lookup
-	srczone = zone_lookup(zones, conndata->srcip);
-	dstzone = zone_lookup(zones, conndata->destip);
+	srczone = zone_lookup(global_cfg->zones, conndata->srcip);
+	dstzone = zone_lookup(global_cfg->zones, conndata->destip);
 
 	conndata->srczone = srczone;
 	conndata->destzone = dstzone;
 
-	log_debug("Connection zone lookup finished, srczone='%s', dstzone='%s'\n", zone_names[srczone]->str, zone_names[dstzone]->str);
+	log_debug("Connection zone lookup finished, srczone='%s', dstzone='%s'\n", global_cfg->zone_names[srczone]->str, global_cfg->zone_names[dstzone]->str);
 
 	//rule lookup
 	rule = phx_apptable_lookup(conndata->proc_name, conndata->pid, direction, srczone, dstzone);
@@ -178,7 +175,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		if (rule->verdict == WAIT_FOR_ANSWER)
 		{
 			log_debug("Program %s found in list, question to GUI already asked, sending to pending\n", conndata->proc_name->str);
-			if (pending)
+			if (!pending)
 			{
 				nfq_verdict = NF_REPEAT;
 				mark = direction == OUTBOUND ? 0x2 : 0x1;

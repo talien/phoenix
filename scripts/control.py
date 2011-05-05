@@ -408,20 +408,20 @@ class ZoneEditWindow(gtk.Window):
 		self.name_entry.set_text(zname)
 		self.network_entry = gtk.Entry()
 		self.network_entry.set_text(znet)
-		layout.put(gtk.Label("Zone id"), 0, 0)
-		layout.put(gtk.Label("Zone name"),0,30)
-		layout.put(gtk.Label("Network"),0,60)
-		layout.put(gtk.Label("%d" % self.zid), 100,0)
-		layout.put(self.name_entry,100,30)
-		layout.put(self.network_entry, 100,60)
+		layout.put(gtk.Label("Zone id"), 10, 10)
+		layout.put(gtk.Label("Zone name"),10,40)
+		layout.put(gtk.Label("Network"),10,70)
+		layout.put(gtk.Label("%d" % self.zid), 110,10)
+		layout.put(self.name_entry,110,40)
+		layout.put(self.network_entry, 110,70)
 		okbutton = gtk.Button("OK")
 		cancelbutton = gtk.Button("Cancel")
 		okbutton.connect("clicked", self.ok_button_clicked, None)
 		cancelbutton.connect("clicked", self.cancel_button_clicked, None)
-		layout.put(okbutton,30,150);
-		layout.put(cancelbutton,120,150);
+		layout.put(okbutton,220,150);
+		layout.put(cancelbutton,10,150);
 
-		self.resize(200,200);
+		self.resize(250,200);
 		self.add(layout)
 		self.show_all()
 
@@ -586,6 +586,7 @@ class MainWindow(gtk.Window):
 
 	def rule_add_clicked(self, widget, data = None):
 		win = RuleEditWindow(None, self.cfg)
+		win.set_title("Add rule")
 		win.show()
 
 	def rule_edit_clicked(self, widget, data = None):
@@ -594,6 +595,7 @@ class MainWindow(gtk.Window):
 			print "No selection"
 			return
 		win = RuleEditWindow(riter, self.cfg)
+		win.set_title("Edit rule")
 		win.show()
 
 	def rule_delete_clicked(self, widget, data = None):

@@ -3,9 +3,9 @@
 int
 check_pid_exists(int pid)
 {
-	char buf[16];
+	char buf[32];
 	int res;
-	sprintf(buf,"/proc/%d",pid);
+	snprintf(buf,sizeof(buf), "/proc/%d",pid);
 	res = access(buf, F_OK);
 	if (res != 0)	
 	{

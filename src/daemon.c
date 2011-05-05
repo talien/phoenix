@@ -24,35 +24,11 @@
 #include "serialize.h"
 #include "zones.h"
 #include "config.h"
-
-struct nfq_q_handle *in_qhandle, *out_qhandle, *in_pending_qhandle,
-    *out_pending_qhandle;
-
-GAsyncQueue *to_gui;
-
-int pending_conn_count = 0, in_pending_count = 0;
-
-struct nfq_handle *in_handle, *out_handle, *in_pending_handle,
-    *out_pending_handle;
-static int out_fd, in_fd, in_pending_fd, out_pending_fd, rv;
-
-char buf[2048];
-
-char phx_buf[2048];
-
-GString* zone_names[256];
-
-GThread *gui_thread, *pending_thread, *control_thread;
+#include "data.h"
 
 GCond *pending_cond;
 
 GMutex *cond_mutex;
-
-GMutex *zone_mutex;
-
-radix_bit *zones;
-
-GHashTable* aliases;
 
 int end = 0;
 
@@ -169,7 +145,7 @@ int parse_config(const char* filename)
 	guchar buf[4];
 	guint32 mask;	
 	FILE* conffile;
-	aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
+	global_cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
 
 	if (filename == NULL)
 	{
@@ -180,7 +156,7 @@ int parse_config(const char* filename)
 		conffile = fopen(filename, "r");
 	}
 
-	zones = g_new0(radix_bit, 1);
+	global_cfg->zones = g_new0(radix_bit, 1);
 	if (!conffile)
 		return FALSE;
 
@@ -249,8 +225,8 @@ int parse_config(const char* filename)
 			{
 				log_debug("Adding zone: name='%s', network='%s', zoneid='%d' \n", var1, var2, zoneid);
 				parse_network(var2, buf, &mask);
-				zone_add(zones, buf, mask, zoneid);
-				zone_names[zoneid] = g_string_new(var1);
+				zone_add(global_cfg->zones, buf, mask, zoneid);
+				global_cfg->zone_names[zoneid] = g_string_new(var1);
 				zoneid += 1;
 			}
 			else if (state == PHX_STATE_ALIAS)
@@ -259,7 +235,7 @@ int parse_config(const char* filename)
 				GString *name, *alias;
 				name = g_string_new(var1);
 				alias = g_string_new(var2);
-				g_hash_table_insert(aliases, name, alias);
+				g_hash_table_insert(global_cfg->aliases, name, alias);
 			}
 		}
 	}
@@ -316,7 +292,7 @@ void control_handle_query(int sock)
 	else if (!strncmp(command,"GZN",3))
 	{
 		buffer = g_new(char,8192);
-		data_len = phx_serialize_zones(buffer, zones);
+		data_len = phx_serialize_zones(buffer, global_cfg->zones);
 		log_debug("Get zone request received, sending zones, size='%d'\n", data_len);
 		send(sock, buffer, data_len, 0);
 		g_free(buffer);
@@ -324,7 +300,7 @@ void control_handle_query(int sock)
 	else if (!strncmp(command,"SZN",3))
 	{
 		log_debug("Zone setting request got, len='%d'\n", hs_len-3);
-	 	phx_deserialize_zones(command+3, hs_len - 3, &zones);
+	 	phx_deserialize_zones(command+3, hs_len - 3, &global_cfg->zones);
 		send(sock,"ACK",4,0);
 	}
 	else if (!strncmp(command,"SET",3))
@@ -358,12 +334,12 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 GString* resolv_user_alias(GString* username)
 {
 	GString *result, *star;
-	result = g_hash_table_lookup(aliases, username);
+	result = g_hash_table_lookup(global_cfg->aliases, username);
 	if (result == NULL)
 	{
 	
 		star = g_string_new("*");
-		result = g_hash_table_lookup(aliases, star);
+		result = g_hash_table_lookup(global_cfg->aliases, star);
 		g_string_free(star, TRUE);
 		if (result == NULL)
 		{
@@ -377,6 +353,7 @@ GString* resolv_user_alias(GString* username)
 
 struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 {
+	char phx_buf[4096];
 	int dlen = phx_serialize_data(data, phx_buf);
 	phx_app_rule* rule;
 	int s, len;
@@ -446,12 +423,10 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	}
 	log_debug("Got data from GUI on IPC, len:%d\n", recvd);
 	phx_deserialize_data(phx_buf, &verdict, &srczone, &destzone, &pid);
-//	phx_apptable_delete(data, data->direction, data->srczone, data->destzone);
 	data->state = verdict;
 	data->srczone = srczone;
 	data->destzone = destzone;
 	data->pid = pid;
-//	phx_apptable_insert(data, data->direction, pid, srczone, destzone);
 	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
 	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d', pid='%d'\n", data->state, data->srczone, data->destzone, data->pid);
 	close(s);
@@ -533,11 +508,12 @@ struct timespec ival;
 //main processing iteration, processing normal queues (inbound, and outbound)
 gint main_loop_iterate()
 {
-	int ret;
+	char buf[4096];
+	int ret, rv;
 
-	polls[0].fd = out_fd;
+	polls[0].fd = qdata.out_fd;
 	polls[0].events = POLLIN | POLLPRI;
-	polls[1].fd = in_fd;
+	polls[1].fd = qdata.in_fd;
 	polls[1].events = POLLIN | POLLPRI;
 	ret = poll(polls, 2, -1);
 	if (ret > 0)
@@ -545,22 +521,22 @@ gint main_loop_iterate()
 		if ((polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI))
 		{
 			while ((rv =
-				recv(out_fd, buf, sizeof(buf),
+				recv(qdata.out_fd, buf, sizeof(buf),
 				     MSG_DONTWAIT)) && rv > 0)
 			{
 				log_debug("Packet received on out_fd\n");
-				nfq_handle_packet(out_handle, buf, rv);
+				nfq_handle_packet(qdata.out_handle, buf, rv);
 				log_debug("Packet handled on out_fd\n");
 			}
 		}
 		if ((polls[1].revents & POLLIN) || (polls[1].revents & POLLPRI))
 		{
 			while ((rv =
-				recv(in_fd, buf, sizeof(buf), MSG_DONTWAIT))
+				recv(qdata.in_fd, buf, sizeof(buf), MSG_DONTWAIT))
 			       && rv > 0)
 			{
 				log_debug("Packet received on in_fd\n");
-				nfq_handle_packet(in_handle, buf, rv);
+				nfq_handle_packet(qdata.in_handle, buf, rv);
 				log_debug("Packet handled on in_fd\n");
 			}
 		}
@@ -578,6 +554,8 @@ we can only(?) estimate the size of the pending queue
 */
 gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 {
+	char buf[4096];
+	int rv;
 	cond_mutex = g_mutex_new();
 	pending_cond = g_cond_new();
 	while (!end)
@@ -590,9 +568,9 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 		int ret;
 		int now_count;
 
-		polls[0].fd = out_pending_fd;
+		polls[0].fd = qdata.out_pending_fd;
 		polls[0].events = POLLIN | POLLPRI;
-		polls[1].fd = in_pending_fd;
+		polls[1].fd = qdata.in_pending_fd;
 		polls[1].events = POLLIN | POLLPRI;
 		log_debug("Polling in pending thread\n");
 		ret = poll(polls, 2, 0);
@@ -605,14 +583,14 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = pending_conn_count;
 				for (i = 0; i < now_count; i++)
 				{
-					rv = recv(out_pending_fd, buf,
+					rv = recv(qdata.out_pending_fd, buf,
 						  sizeof(buf), MSG_DONTWAIT);
 					if (rv > 0)
 					{
 						log_debug
 						    ("Packet received in outbound pending queue\n");
 						nfq_handle_packet
-						    (out_pending_handle,
+						    (qdata.out_pending_handle,
 						     buf, rv);
 						log_debug("Packet handled\n");
 					}
@@ -624,14 +602,14 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = in_pending_count;
 				for (i = 0; i < now_count; i++)
 				{
-					rv = recv(in_pending_fd, buf,
+					rv = recv(qdata.in_pending_fd, buf,
 						  sizeof(buf), MSG_DONTWAIT);
 					if (rv > 0)
 					{
 						log_debug
 						    ("Packet received in inbound pending queue\n");
 						nfq_handle_packet
-						    (in_pending_handle,
+						    (qdata.in_pending_handle,
 						     buf, rv);
 						log_debug("Packet handled\n");
 					}
@@ -701,17 +679,16 @@ void signal_quit(int signum G_GNUC_UNUSED)
 
 int main(int argc, char **argv)
 {
-
-	GThread* clear_thread;
+	GThread *gui_thread, *pending_thread, *control_thread, *clear_thread;
 	phx_init_config(&argc, &argv);
 	log_debug("Opening netlink connections\n");
 	log_error("phoenix firewall starting up\n");
 
-	init_queue(&in_handle, &in_qhandle, &in_fd, phx_queue_callback, 1);
-	init_queue(&out_handle, &out_qhandle, &out_fd, phx_queue_callback, 0);
-	init_queue(&out_pending_handle, &out_pending_qhandle, &out_pending_fd,
+	init_queue(&qdata.in_handle, &qdata.in_qhandle, &qdata.in_fd, phx_queue_callback, 1);
+	init_queue(&qdata.out_handle, &qdata.out_qhandle, &qdata.out_fd, phx_queue_callback, 0);
+	init_queue(&qdata.out_pending_handle, &qdata.out_pending_qhandle, &qdata.out_pending_fd,
 		   phx_queue_callback, 3);
-	init_queue(&in_pending_handle, &in_pending_qhandle, &in_pending_fd,
+	init_queue(&qdata.in_pending_handle, &qdata.in_pending_qhandle, &qdata.in_pending_fd,
 		   phx_queue_callback, 2);
 
 	signal(SIGTERM, signal_quit);
@@ -750,10 +727,10 @@ exit:
 
 	log_debug("Closing netlink connections\n");
 
-	close_queue(out_handle, out_qhandle);
-	close_queue(in_handle, in_qhandle);
-	close_queue(out_pending_handle, out_pending_qhandle);
-	close_queue(in_pending_handle, in_pending_qhandle);
+	close_queue(qdata.out_handle, qdata.out_qhandle);
+	close_queue(qdata.in_handle, qdata.in_qhandle);
+	close_queue(qdata.out_pending_handle, qdata.out_pending_qhandle);
+	close_queue(qdata.in_pending_handle, qdata.in_pending_qhandle);
 
 	log_debug("Thread exited!\n");
 	g_thread_join(pending_thread);

@@ -69,6 +69,7 @@ void phx_init_config(int* argc, char*** argv)
 {
 	global_cfg = g_new0(phx_config,1);
 	global_cfg->logging_mode = PHX_CFG_LOG_STDERR;
+	global_cfg->zone_names = g_new0(GString*, 256);
 	phx_parse_command_line(argc, argv);
 	phx_init_log();
 };
