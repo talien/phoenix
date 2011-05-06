@@ -410,7 +410,7 @@ GString* get_command_line(guint32 pid)
 		return NULL;
 	}
 	int len = read(cmdf, buf, sizeof(buf));
-	close(fbuf);
+	close(cmdf);
 	int i = 0;
 	for (; i < len;i++)
 	{
