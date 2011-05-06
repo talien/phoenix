@@ -397,3 +397,25 @@ get_user (guint32 pid)
     return result;
 }
 
+
+GString* get_command_line(guint32 pid)
+{
+	char fbuf[32];
+	char buf[1024];
+	snprintf(fbuf, 32, "/proc/%d/cmdline", pid);
+	int cmdf = open(fbuf, 0);
+	if (cmdf < 0)
+	{
+		log_debug("Cannot open specified command_line file, file='%s'\n", fbuf);
+		return NULL;
+	}
+	int len = read(cmdf, buf, sizeof(buf));
+	int i = 0;
+	for (; i < len - 1;i++)
+	{
+		if (buf[i] == '\0')
+			buf[i] = ' ';
+	}
+	buf[len -1 ] = '\0';
+	return g_string_new(buf);
+}

@@ -5,7 +5,7 @@ import os,sys,socket, getpass, select, struct
 dir_map = { 0 : "Outbound", 1 : "Inbound" }
 
 class ClientWindow(gtk.Dialog):
-	def __init__(self, process_name, pid, srcip, sport, destip, dport, direction, sz_name, dz_name, src_zone, dest_zone):
+	def __init__(self, process_name, pid, srcip, sport, destip, dport, direction, sz_name, dz_name, src_zone, dest_zone, cmd_line):
 		gtk.Dialog.__init__(self)
 		self.process_name = process_name;
 		self.pid = pid
@@ -24,7 +24,7 @@ class ClientWindow(gtk.Dialog):
 			dest_dns_name = dest_ip
 		layout = gtk.Fixed()
 		layout.put(gtk.Label("The program %s with the following parameters want to reach the internet:" % process_name),10,10);
-		layout.put(gtk.Label("Process ID:%d" % pid),10,35);
+		layout.put(gtk.Label("Process ID:%d (%s)" % (pid,cmd_line)),10,35);
 		layout.put(gtk.Label("Source IP: %s (%s)" % (source_ip,source_dns_name)),10,60)
 		layout.put(gtk.Label("Source port: %d" % sport ),10,85)
 		layout.put(gtk.Label("Destination IP: %s (%s)" % (dest_ip, dest_dns_name)),10,110)
@@ -93,8 +93,8 @@ def phx_client_unpack(sformat, data):
 	return t
 
 def process_data(data):
-	(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name) = phx_client_unpack("SI4sI4sIIIISS",data)
-	dialog = ClientWindow(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name)
+	(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name, cmd_line) = phx_client_unpack("SI4sI4sIIIISSS",data)
+	dialog = ClientWindow(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name, cmd_line)
 	resp = dialog.run()
 	if (resp == gtk.RESPONSE_YES):
 		verdict = 1 # ACCEPTED

@@ -25,6 +25,8 @@ void phx_conn_data_unref(phx_conn_data* cdata)
 	{
 		if (cdata->proc_name)
 			g_string_free(cdata->proc_name, TRUE);
+		if (cdata->cmd_line)
+			g_string_free(cdata->cmd_line, TRUE);
 		g_free(cdata);
 	}
 }

@@ -9,7 +9,7 @@ int
 phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 		 int direction)
 {
-	guint32 headlen;
+	guint32 headlen, result;
 
 	headlen = (payload[0] % 16) * 4;
 	cdata->sport =
@@ -21,7 +21,11 @@ phx_data_extract(const char *payload, struct phx_conn_data *cdata,
 	memcpy((char*)cdata->destip, (char*)payload + 16, 4);
 	memcpy((char*)cdata->srcip, (char*)payload + 12, 4);
 	cdata->direction = direction;
-	return get_proc_from_conn(cdata, direction);
+	
+	result = get_proc_from_conn(cdata, direction);
+	//FIXME: sane error handling
+	cdata->cmd_line = get_command_line(cdata->pid);
+	return result;
 }
 
 int phx_extract_nfq_pkt_data(struct nfq_data *nfad, int* id, char** payload)

@@ -19,6 +19,7 @@
 typedef struct phx_conn_data
 {
    GString* proc_name;
+   GString* cmd_line;
    guint32 pid;
    guchar srcip[4];
    guint32 sport;
