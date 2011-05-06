@@ -410,12 +410,20 @@ GString* get_command_line(guint32 pid)
 		return NULL;
 	}
 	int len = read(cmdf, buf, sizeof(buf));
+	close(fbuf);
 	int i = 0;
-	for (; i < len - 1;i++)
+	for (; i < len;i++)
 	{
 		if (buf[i] == '\0')
 			buf[i] = ' ';
 	}
-	buf[len -1 ] = '\0';
+	if (len == 1024)
+	{
+		buf[len - 1] = '\0';
+	}
+	else
+	{
+		buf[len] = '\0';
+	}
 	return g_string_new(buf);
 }
