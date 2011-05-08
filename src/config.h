@@ -13,6 +13,8 @@ typedef struct phx_config
 	int logging_mode;
 	int enable_core;
 	gchar* conf_file;
+	GString* zone_file;
+	GString* rule_file;
 	struct radix_bit* zones;
 	GString** zone_names;
 	GHashTable* aliases;

@@ -466,7 +466,7 @@ void signal_quit(int signum G_GNUC_UNUSED)
 
 int main(int argc, char **argv)
 {
-	GThread *gui_thread, *pending_thread, *control_thread, *clear_thread;
+	GThread *gui_thread, *pending_thread = NULL, *control_thread, *clear_thread;
 	phx_init_config(&argc, &argv);
 	log_error("phoenix firewall starting up\n");
 	log_debug("Opening netlink connections\n");
@@ -524,7 +524,8 @@ exit:
 	close_queue(qdata.in_pending_handle, qdata.in_pending_qhandle);
 
 	log_debug("Thread exited!\n");
-	g_thread_join(pending_thread);
+	if (pending_thread)
+		g_thread_join(pending_thread);
 
 	g_cond_free(pending_cond);
 
