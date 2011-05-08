@@ -3,30 +3,28 @@
 import os,sys,socket, struct
 import gtk
 
-#change_store = []
-
 dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
 verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
 verdict_dir = { 0 : "NEW", 1: "ACCEPTED", 2: "DENIED", 3 : "DENY_CONN", 5 : "ACCEPT_CONN", 7 : "ASK", 8 : "WAIT_FOR_ANSWER" }
-
-#apptable = {}
 
 class Config:
 	def __init__(self):
 		self.apptable = {}
 		self.zones = {}
 		self.liststore = gtk.ListStore(str, int, int,int, int,str, int,str)
-		self.zonestore = gtk.ListStore(int, str, str)
 		self.change_store = []
 
-	def export_list_store(self, filename):
-		f = open(filename,"w")
-		new_table = apptable_merge_changes(self.apptable, self.change_store)
-		for appname, chain in new_table.iteritems():
-			for rule in chain:
-				if rule.verdict == 1 or rule.verdict == 2:
-					f.write(rule.save())
-		f.close()
+	def export_rules(self, filename):
+		new_table = self.apptable.merge_changes(self.change_store)
+		new_table.export(filename)
+
+	def refresh_liststore(self):
+		print "Refreshing liststore, papptable_len:%d" % len(self.apptable.apptable)
+		self.liststore.clear()
+		new_table = self.apptable.merge_changes(self.change_store)
+		print "new_table length: %d" % len(new_table.apptable)
+		new_table.populate(self.liststore)
+
 				
 
 class Rule:
@@ -68,7 +66,175 @@ class Rule:
 		elif self.verdict == 2:
 			result += " verdict = denied\n"
 		return result
+	def parse(self, data, position, zones):
+		print "Data: %r, position:%d" % (data,position)
+		rlen, (pid,verdict,srczone,destzone,direction, appname) = phx_client_unpack("IIIIIS", data[position:])
+		self.__init__(appname, pid, direction, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0])
+		return position + rlen
+
+class Apptable:
+	def __init__(self):
+		self.apptable = {}
+
+	def parse(self, data, zones):
+		position = 0;
+		(chains,) = struct.unpack("I",data[position:position+4])
+		print "chain number='%d'" % chains
+		self.apptable = {}
+		position += 4
+		for i in range (0,chains):
+			position = self.parse_chain(data, position, zones)
 		
+	def parse_chain(self, data, position, zones):
+		print "Parsing chain, position='%d'" % position
+		(hashes,) = struct.unpack("I",data[position:position+4])
+		position = position + 4
+		chain = []
+		appname = ""
+		rule = Rule()
+		for i in range(0,hashes):
+			position = rule.parse(data, position, zones)
+			self.add_rule(rule)
+		print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
+		return position
+	
+	def delete_rule(self, rule):
+		#note: delete chain if become empty
+		print "Deleting rule, %s" % rule
+		chain = self.apptable[rule.appname]
+		i = 0
+		for crule in chain:
+			if (rule == crule):
+				print "deleting rule chain:%s id:%d" % (rule.appname, i)
+				print "Deleted rule: %s" % crule
+				chain.remove(crule)
+			i += 1
+
+	def add_rule(self, rule):
+		print "Adding rule, %s" % rule
+		if rule.appname in self.apptable:
+			chain = self.apptable[rule.appname]
+			chain.append(rule)		
+		else:
+			chain = []
+			chain.append(rule)
+			self.apptable[rule.appname] = chain
+
+	def copy(self):
+		new_table = Apptable()
+		print "Copying apptable, chains:%d" % len(self.apptable)
+		for name, chain in self.apptable.iteritems():
+			new_table.apptable[name] = list(chain)
+		return new_table
+
+	def merge_changes(self, changes):
+		new_table = self.copy()
+		print "merge_changes, new_table_len:%d" % len(new_table.apptable)
+		for (ctype,rule) in changes:
+			print "%s" % ctype
+#			apptable_dump(new_table)
+			if (ctype == "DELETE"):
+				new_table.delete_rule(rule)
+			if (ctype == "ADD"):
+			    new_table.add_rule(rule)
+		return new_table
+
+	def export(self, filename):		
+		f = open(filename,"w")
+		for appname, chain in self.apptable.iteritems():
+			for rule in chain:
+				if rule.verdict == 1 or rule.verdict == 2:
+					f.write(rule.save())
+		f.close()
+	def populate(self,liststore):
+		for name,chain in self.apptable.iteritems():
+			for rule in chain:
+				liststore.append((name, rule.pid, rule.direction, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
+
+	def dump(self):
+		print "===="
+		print "Dumping apptable, chain_num='%d'" % len(self.apptable)
+		for name, chain in self.apptable.iteritems():
+			print "Dumping chain, name='%s', chain_items='%d'" % (name,len(chain))
+			for rule in chain:
+				print "Rule, rule='%s'" % rule
+		print "===="			
+
+class Zones:
+	def __init__(self):
+		self.zones = {}
+		self.zonestore = gtk.ListStore(int, str, str)
+		
+	def parse(self,data):
+		position = 0
+		self.zones = {}
+		self.zones[0] = ("*","0.0.0.0/0")
+		while position < len(data):
+			(zlen,) = struct.unpack("<I", data[position:position+4])
+			print "Unpacking zone, len='%d', position='%d'" % (zlen, position)
+			position += 4
+			tmp,(zonename, zoneid, network) = phx_client_unpack("SIS", data[position:position+zlen])
+			self.zones[zoneid] = (zonename, network)
+			position += zlen
+		self.populate()
+
+	def serialize(self):
+		self.fill()
+		result = ""
+		for zoneid, (zonename, network) in self.zones.iteritems():
+			if (zoneid != 0):
+				result += phx_client_pack("SIS",(zonename, zoneid, network));
+		return result
+
+	def get_id_from_name(self,zname):
+		for zoneid, (zonename, network) in self.zones.iteritems():
+			if (zonename == zname):
+				return zoneid
+
+		#hmm, perhaps i should use some *normal* error handling? (exceptions)
+		return -1
+
+	def populate(self):
+		for zoneid, (zonename, network) in self.zones.iteritems():
+			if zoneid != 0:
+				self.zonestore.append((zoneid, zonename, network))
+
+	def fill(self, append_wildcard = False):
+		self.zones = {}
+		if append_wildcard:
+			self.zones[0] = ("*","0.0.0.0/0")
+		liter = self.zonestore.get_iter_first()
+		while (liter):
+			zid = self.zonestore.get_value(liter, 0)
+			zname = self.zonestore.get_value(liter, 1)
+			znetwork = self.zonestore.get_value(liter, 2)
+			liter = self.zonestore.iter_next(liter)
+			self.zones[zid] = (zname, znetwork)
+	def get_first_free_zone_id(self):
+		zids = set()
+		ziter = self.zonestore.get_iter_first()
+		while (ziter):
+			zids = zids | set([self.zonestore.get_value(ziter,0)])
+			ziter = self.zonestore.iter_next(ziter)
+		for i in range(1,256):
+			if (not i in zids):
+				return i
+
+
+	def add(self, zid, name, netmask):
+		self.zonestore.append((zid, name, netmask))
+
+
+	def modify(self, ziter, name, netmask):
+		self.zonestore.set_value(ziter, 1, name)
+		self.zonestore.set_value(ziter, 2, netmask)
+
+	def get_name(self, ziter):
+		return self.zonestore.get_value(ziter, 1)
+
+	def delete(self, ziter):
+		return self.zonestore.remove(ziter)
+
 
 def phx_client_unpack(sformat, data):
     i = 0
@@ -95,7 +261,7 @@ def phx_client_unpack(sformat, data):
             t = t + gvar
             amount = 0
         i += 1
-    return t
+    return (pd,t)
 
 def phx_client_pack(sformat, data):
 	i = 0
@@ -132,143 +298,9 @@ def phx_serialize_changes(changelist):
 		else:
 			int_mode = 1
 		result += phx_client_pack("I",(int_mode,))
-		#result += phx_serialize_rule(rule)
 		result += rule.serialize()
-	return result
+	return result	
 
-def parse_rule(data, position, zones):
-	print "Data: %r, position:%d" % (data,position)
-	(pid,verdict,srczone,destzone,direction, strlen) = struct.unpack("IIIIII",data[position:position+24])
-	position += 24
-	(appname,) = struct.unpack("<%ds" % strlen,data[position:position+strlen])
-	position += strlen
-	return (appname, position, Rule(appname, pid, direction, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0]))
-	
-
-def parse_chain(data, position, zones):
-	print "Parsing chain, position='%d'" % position
-	(hashes,) = struct.unpack("I",data[position:position+4])
-	position = position + 4
-	chain = []
-	appname = ""
-	for i in range(0,hashes):
-		(appname, position, rule) = parse_rule(data,position, zones)
-		chain.append(rule)
-	print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
-	return (appname, position, chain)
-
-def parse_apptable(data, zones):
-	position = 0;
-	(chains,) = struct.unpack("I",data[position:position+4])
-	print "chain number='%d'" % chains
-	apptable = {}
-	position += 4
-	for i in range (0,chains):
-		(appname, position, chain) = parse_chain(data,position, zones)
-		print "Position after parse:position='%d'" % position
-		apptable[appname] = chain
-	return apptable
-
-def parse_zones(data):
-	position = 0
-	zones = {}
-	zones[0] = ("*","0.0.0.0/0")
-	while position < len(data):
-		(zlen,) = struct.unpack("<I", data[position:position+4])
-		print "Unpacking zone, len='%d', position='%d'" % (zlen, position)
-		position += 4
-		(zonename, zoneid, network) = phx_client_unpack("SIS", data[position:position+zlen])
-		zones[zoneid] = (zonename, network)
-		position += zlen
-	return zones
-
-def pack_zones(zones):
-	result = ""
-	for zoneid, (zonename, network) in zones.iteritems():
-		if (zoneid != 0):
-			result += phx_client_pack("SIS",(zonename, zoneid, network));
-	return result
-
-def populate_zone_store(liststore, zones):
-	for zoneid, (zonename, network) in zones.iteritems():
-		if zoneid != 0:
-			liststore.append((zoneid, zonename, network))
-
-def refresh_liststore(liststore, papptable, changes):
-	print "Refreshing liststore, papptable_len:%d" % len(papptable)
-	liststore.clear()
-	new_table = apptable_merge_changes(papptable, changes)
-	print "new_table length: %d" % len(new_table)
-	populate_liststore(liststore, new_table)
-
-def apptable_dump(papptable):
-	print "===="
-	print "Dumping apptable, chain_num='%d'" % len(papptable)
-	for name, chain in papptable.iteritems():
-		print "Dumping chain, name='%s', chain_items='%d'" % (name,len(chain))
-		for rule in chain:
-			print "Rule, rule='%s'" % rule
-	print "===="
-
-def apptable_delete_rule(papptable, rule):
-	#note: delete chain if become empty
-	print "Deleting rule, %s" % rule
-	chain = papptable[rule.appname]
-	i = 0
-	for crule in chain:
-		if (rule == crule):
-			print "deleting rule chain:%s id:%d" % (rule.appname, i)
-			print "Deleted rule: %s" % crule
-			chain.remove(crule)
-		i += 1
-
-def apptable_add_rule(papptable, rule):
-	print "Adding rule, %s" % rule
-	if rule.appname in papptable:
-		chain = papptable[rule.appname]
-		chain.append(rule)		
-	else:
-		chain = []
-		chain.append(rule)
-		papptable[rule.appname] = chain
-			
-def apptable_copy(papptable):
-	new_table = {}
-	print "Copying apptable, chains:%d" % len(papptable)
-	for name, chain in papptable.iteritems():
-		new_table[name] = list(chain)
-	return new_table
-
-def apptable_merge_changes(papptable, changes):
-	new_table = apptable_copy(papptable)
-	print "merge_changes, new_table_len:%d" % len(new_table)
-	for (ctype,rule) in changes:
-		print "%s" % ctype
-		apptable_dump(new_table)
-		if (ctype == "DELETE"):
-			apptable_delete_rule(new_table, rule)
-		if (ctype == "ADD"):
-			apptable_add_rule(new_table, rule)
-	return new_table
-
-def populate_liststore(liststore, papptable):
-	for name,chain in papptable.iteritems():
-		for rule in chain:
-			liststore.append((name, rule.pid, rule.direction, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
-
-
-def zone_store_to_var(liststore, append_wildcard = False):
-	zones = {}
-	if append_wildcard:
-		zones[0] = ("*","0.0.0.0/0")
-	liter = liststore.get_iter_first()
-	while (liter):
-		zid = liststore.get_value(liter, 0)
-		zname = liststore.get_value(liter, 1)
-		znetwork = liststore.get_value(liter, 2)
-		liter = liststore.iter_next(liter)
-		zones[zid] = (zname, znetwork)
-	return zones;
 
 def send_command(command, cdata = None):
 	s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -279,14 +311,6 @@ def send_command(command, cdata = None):
 	s.close()
 	return data
 
-def get_zone_id_from_name(zname, zones):
-	for zoneid, (zonename, network) in zones.iteritems():
-		if (zonename == zname):
-			return zoneid
-
-	#hmm, perhaps i should use some *normal* error handling? (exceptions)
-	return -1
-
 def create_cell(treeview, column_name = "Column", column_text = 0, render_func = None):
 	cell = gtk.CellRendererText()
 	col = gtk.TreeViewColumn( column_name )
@@ -296,16 +320,6 @@ def create_cell(treeview, column_name = "Column", column_text = 0, render_func =
 	else:
 		col.set_cell_data_func(cell, render_func, None)
 	treeview.append_column(col)
-
-def get_first_free_zone_id(liststore):
-	zids = set()
-	ziter = liststore.get_iter_first()
-	while (ziter):
-		zids = zids | set([liststore.get_value(ziter,0)])
-		ziter = liststore.iter_next(ziter)
-	for i in range(1,256):
-		if (not i in zids):
-			return i
 
 class RuleEditWindow(gtk.Window):
 	def fill_zones(self, combobox, zonestore, active):
@@ -402,29 +416,29 @@ class RuleEditWindow(gtk.Window):
 	def ok_button_clicked(self, widget, data = None):
 		rule = self.create_rule()
 		if self.mode == "ADD":
-			change_store.append(("ADD", rule))
-			refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
+			self.cfg.change_store.append(("ADD", rule))
+			self.cfg.refresh_liststore()
 		else:
 			if rule != self.rule:
-				change_store.append(("DELETE", self.rule))
-				change_store.append(("ADD",rule))
-				refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
+				self.cfg.change_store.append(("DELETE", self.rule))
+				self.cfg.change_store.append(("ADD",rule))
+				self.cfg.refresh_liststore()
 		self.destroy()
 
 class ZoneEditWindow(gtk.Window):
-	def __init__(self, ziter, liststore):
+	def __init__(self, ziter, cfg):
 		gtk.Window.__init__(self)
 		layout = gtk.Fixed()
 		zname = ""
-		self.zid = get_first_free_zone_id(liststore)
+		self.cfg = cfg
+		self.zid = self.cfg.zones.get_first_free_zone_id()
 		znet = ""
 		if (ziter != None):
 			self.wtype = 0
-			self.zid = liststore.get_value(ziter, 0)
-			zname = liststore.get_value(ziter, 1)
-			znet = liststore.get_value(ziter, 2)
+			self.zid = self.cfg.zones.zonestore.get_value(ziter, 0)
+			zname = self.cfg.zones.zonestore.get_value(ziter, 1)
+			znet = self.cfg.zones.zonestore.get_value(ziter, 2)
 		self.ziter = ziter
-		self.liststore = liststore
 		self.name_entry = gtk.Entry()
 		self.name_entry.set_text(zname)
 		self.network_entry = gtk.Entry()
@@ -448,10 +462,9 @@ class ZoneEditWindow(gtk.Window):
 
 	def ok_button_clicked(self, widget, data=None):
 		if (self.ziter !=None):
-			self.liststore.set_value(self.ziter, 1, self.name_entry.get_text())
-			self.liststore.set_value(self.ziter, 2, self.network_entry.get_text())
+			self.cfg.zones.modify(self.ziter, self.name_entry.get_text(), self.network_entry.get_text())
 		else:
-			self.liststore.append((self.zid, self.name_entry.get_text(),self.network_entry.get_text()))
+			self.cfg.zones.add(self.zid, self.name_entry.get_text(),self.network_entry.get_text())
 		self.destroy()
 
 	def cancel_button_clicked(self, widget, data=None):
@@ -463,10 +476,9 @@ class MainWindow(gtk.Window):
 	def __init__(self,cfg):
 		gtk.Window.__init__(self)
 		self.cfg = cfg
-		refresh_liststore(cfg.liststore, cfg.apptable, cfg.change_store)
-		populate_zone_store(cfg.zonestore, cfg.zones)
+		self.cfg.refresh_liststore()
 		self.treeview = gtk.TreeView(cfg.liststore)
-		self.zoneview = gtk.TreeView(cfg.zonestore)
+		self.zoneview = gtk.TreeView(self.cfg.zones.zonestore)
 
 		main_box = gtk.VBox(False,0)
 
@@ -596,29 +608,28 @@ class MainWindow(gtk.Window):
 
 
 	def zone_commit_clicked(self, widget, data = None):
-		self.zones = zone_store_to_var(self.cfg.zonestore)
-		test = pack_zones(self.cfg.zones)
-		print "Zone pack test '%r'" % test
-		data = send_command("SZN"+test);
+		data_send = self.cfg.zones.serialize()
+		print "Zone pack test '%r'" % data_send
+		data = send_command("SZN"+data_send);
 
 	def zone_edit_clicked(self, widget, data = None):
 		(model, ziter) = self.zoneview.get_selection().get_selected()
 		if (ziter == None):
 			print "No selection"
 			return
-		win = ZoneEditWindow(ziter, self.cfg.zonestore)
+		win = ZoneEditWindow(ziter,self.cfg)
 		win.show()
 
 	def zone_delete_clicked(self,widget, data = None):
 		(model, ziter) = self.zoneview.get_selection().get_selected()
 		if (ziter == None):
 			return
-		zonename = self.cfg.zonestore.get_value(ziter, 1)
+		zonename = self.cfg.zones.get_name(ziter)
 		dialog = gtk.MessageDialog(self, 0, gtk.MESSAGE_QUESTION, gtk.BUTTONS_OK_CANCEL, "Are you sure you want to delete zone %s?" % zonename)
 		response = dialog.run()
 		dialog.destroy()
 		if (response == gtk.RESPONSE_OK):
-			self.cfg.zonestore.remove(ziter)			
+			self.cfg.zones.delete(ziter)			
 
 	def rule_add_clicked(self, widget, data = None):
 		win = RuleEditWindow(None, self.cfg)
@@ -638,16 +649,16 @@ class MainWindow(gtk.Window):
 		(model, riter) = self.treeview.get_selection().get_selected()
 		rulestore = self.cfg.liststore
 		self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
-		change_store.append(("DELETE", self.rule))
-		refresh_liststore(self.cfg.liststore, self.cfg.apptable, change_store)
+		self.cfg.change_store.append(("DELETE", self.rule))
+		refresh_liststore(self.cfg.liststore, self.cfg.apptable, self.cfg.change_store)
 
 	def rule_commit_clicked(self, widget, data = None):
-		data = phx_serialize_changes(change_store)
+		data = phx_serialize_changes(self.cfg.change_store)
 		print "Data serialized %r" % data
 		send_command("SET"+data)
 
 	def zone_add_clicked(self, widget, data = None):
-		win = ZoneEditWindow(None, self.cfg.zonestore)
+		win = ZoneEditWindow(None,self.cfg)
 		win.show()
 
 	def destroy(self, widget, data = None):
@@ -657,9 +668,11 @@ class MainWindow(gtk.Window):
 def main():
 	cfg = Config()
 	data = send_command("GZN");
-	cfg.zones = parse_zones(data)
+	cfg.zones = Zones()
+	cfg.zones.parse(data)
 	data = send_command("GET");
-	cfg.apptable = parse_apptable(data, cfg.zones);
+	cfg.apptable = Apptable()
+	cfg.apptable.parse(data, cfg.zones.zones)
 	window = MainWindow(cfg)
 	gtk.main()
 #	cfg.export_list_store("kakukk.txt")	

@@ -1,6 +1,6 @@
 #!/usr/bin/python
-import gtk, gobject
-import os,sys,socket, getpass, select, struct
+import gtk, gobject, glib
+import os,sys,socket, getpass, struct
 
 dir_map = { 0 : "Outbound", 1 : "Inbound" }
 
@@ -104,19 +104,15 @@ def process_data(data):
 	dialog.destroy()
 	return struct.pack("<IIII", verdict, srczone, destzone, pid);
 	
-def gui_timer_callback(lsock):
-	pollobj = select.poll()
-	pollobj.register(lsock, select.POLLIN)
-	polled = pollobj.poll(0)
-	if (len(polled) > 0):
-		(newsock,tmp) = lsock.accept()
-		data = newsock.recv(4096)
-		print "data got, length='%d', data='%r'" % (len(data), data)
-		send_data = process_data(data)
-		print "sending data: '%r'" % send_data
-		newsock.send(send_data)
-		newsock.close()
-	gobject.timeout_add(10, gui_timer_callback, lsock)
+def gui_callback(source,condition,lsock):
+	(newsock,tmp) = lsock.accept()
+	data = newsock.recv(4096)
+	print "data got, length='%d', data='%r'" % (len(data), data)
+	send_data = process_data(data)
+	print "sending data: '%r'" % send_data
+	newsock.send(send_data)
+	newsock.close()
+	return True
 
 def setup_socket():
 	sock_name = "phxsock-" + getpass.getuser()
@@ -129,7 +125,7 @@ def setup_socket():
 
 def main():
 	listen_sock = setup_socket()
-	gobject.timeout_add(10,gui_timer_callback, listen_sock)
+	glib.io_add_watch(listen_sock.fileno(), glib.IO_IN, gui_callback, listen_sock);
 	try:
 		gtk.main()
 	except:

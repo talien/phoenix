@@ -178,14 +178,15 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 		}
 		if (rule->verdict == WAIT_FOR_ANSWER)
 		{
-			log_debug("Program %s found in list, question to GUI already asked, sending to pending\n", conndata->proc_name->str);
 			if (!pending)
 			{
+				log_debug("Program %s found in list, question to GUI already asked, sending to pending\n", conndata->proc_name->str);
 				nfq_verdict = NF_REPEAT;
 				mark = direction == OUTBOUND ? 0x2 : 0x1;
 			}
 			else
 			{
+				log_debug("Program %s found in list, question to GUI already asked, skipping in pending queue\n", conndata->proc_name->str);
 				nfq_verdict = NF_QUEUE;
 			}
 		}
@@ -217,21 +218,6 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 				nfq_verdict = NF_DROP;
 			}
 		}
-		if (rule->verdict == NEW)
-		{
-			if (pending)
-			{
-				log_debug("Rule found with new verdict in pending, pushing back to same queue, program='%s'\n",conndata->proc_name->str);
-				nfq_verdict = NF_QUEUE;
-			}
-			else
-			{
-				log_debug("Rule found with new verdict in non-pending, pushing to pending, program='%s'\n", conndata->proc_name->str);
-				mark = direction == OUTBOUND ? 0x2 : 0x1;
-				nfq_verdict = NF_REPEAT;
-			}
-		}
-
 	} else
 	{
 		log_debug("No rule found for program\n");
@@ -246,7 +232,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			// no rule in non-pending queue, creating one and pushing to queue
 			log_debug("No rule found, inserting a new one for program, program='%s'\n",conndata->proc_name->str);
 			phx_conn_data_ref(conndata);
-			phx_apptable_insert(conndata->proc_name, conndata->pid, direction, NEW, srczone, dstzone);
+			phx_apptable_insert(conndata->proc_name, conndata->pid, direction, WAIT_FOR_ANSWER, srczone, dstzone);
 			phx_conn_data_ref(conndata);
 			g_async_queue_push(to_gui, conndata);
 			//sending to pending queue

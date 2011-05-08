@@ -214,51 +214,15 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	data->pid = pid;
 	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
 	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d', pid='%d'\n", data->state, data->srczone, data->destzone, data->pid);
+	phx_conn_data_unref(data);
 	close(s);
 	return data;
 }
 
 void signal_pending()
 {
+	log_debug("Signalling pending queue\n");
 	g_cond_signal(pending_cond);
-}
-
-int process_gui_queue(struct phx_conn_data* resdata)
-{
-	struct phx_app_rule *rule;
-
-	if (resdata)
-	{
-		log_debug("Processing gui queue\n");
-		if (resdata->proc_name == 0)
-		{
-			log_debug
-			    ("Found NULL process name, something went wrong\n");
-			return 0;
-		}
-		rule =
-		    phx_apptable_lookup(resdata->proc_name, resdata->pid,
-					resdata->direction, resdata->srczone, resdata->destzone);
-		if (rule)
-		{
-			log_debug("App found in hashtable!\n");
-			rule->verdict = resdata->state;
-		}
-		else
-		{
-			//FIXME: This should be a bug!!! Or in a result of simutneous client GUI decision and control modifying.
-			log_debug("Unknown app found, adding to hashtable, name='%s', direction='%d', state='%d'\n",resdata->proc_name->str, resdata->direction, resdata->state);
-			phx_apptable_insert(resdata->proc_name, resdata->pid, resdata->direction, resdata->state, resdata->srczone, resdata->destzone);
-			
-		}
-		phx_conn_data_unref(resdata);
-		signal_pending();
-		log_debug("Signalling pending queue\n");
-		return 1;
-	} else
-	{
-		return 0;
-	}
 }
 
 gpointer clear_invalid_rule_thread(gpointer data G_GNUC_UNUSED)
@@ -281,8 +245,7 @@ gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
 
 		data = send_conn_data(data);
 
-		log_debug("Starting to process gui queue\n");
-		process_gui_queue(data);
+		signal_pending();
 	}
 }
 
