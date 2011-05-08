@@ -3,7 +3,7 @@
 #include "types.h"
 #include "zones.h"
 
-int phx_serialize_data(struct phx_conn_data* data,char* buffer);
+int phx_serialize_conn_data(struct phx_conn_data* data,char* buffer);
 //struct phx_conn_data* phx_deserialize_data(char* buffer, int buflen);
 int phx_pack_data(const char* format, char* buffer, ...);
 int phx_unpack_data(const char* format, char* buffer, ...);

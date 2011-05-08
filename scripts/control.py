@@ -3,13 +3,13 @@
 import os,sys,socket, struct
 import gtk
 
-change_store = []
+#change_store = []
 
 dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
 verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
 verdict_dir = { 0 : "NEW", 1: "ACCEPTED", 2: "DENIED", 3 : "DENY_CONN", 5 : "ACCEPT_CONN", 7 : "ASK", 8 : "WAIT_FOR_ANSWER" }
 
-apptable = {}
+#apptable = {}
 
 class Config:
 	def __init__(self):
@@ -19,6 +19,15 @@ class Config:
 		self.zonestore = gtk.ListStore(int, str, str)
 		self.change_store = []
 
+	def export_list_store(self, filename):
+		f = open(filename,"w")
+		new_table = apptable_merge_changes(self.apptable, self.change_store)
+		for appname, chain in new_table.iteritems():
+			for rule in chain:
+				if rule.verdict == 1 or rule.verdict == 2:
+					f.write(rule.save())
+		f.close()
+				
 
 class Rule:
 	def __init__(self, appname = "", pid = 0, direction = 0, verdict = 0, src_zone_id = 0, source_zone = "*", dst_zone_id = 0, dest_zone = "*"):
@@ -46,6 +55,20 @@ class Rule:
 
 	def __str__(self):
 		return "Name: %s, pid:%d, direction:%d, verdict:%d, src_zone_id:%d, dst_zone_id:%d" % (self.appname, self.pid, self.direction, self.verdict, self.src_zone_id, self.dst_zone_id)
+
+	def serialize(self):
+		return phx_client_pack("SIIIII", (self.appname, self.pid, self.direction, self.verdict, self.src_zone_id, self.dst_zone_id))
+
+	def save(self):
+		result = "[rule]\n program = %s\n" % self.appname
+		if self.pid != 0:
+			result += " pid = %s\n" % self.pid
+		if self.verdict == 1:
+			result += " verdict = accepted\n"
+		elif self.verdict == 2:
+			result += " verdict = denied\n"
+		return result
+		
 
 def phx_client_unpack(sformat, data):
     i = 0
@@ -99,9 +122,6 @@ def phx_client_pack(sformat, data):
 		i += 1
 	return result
 
-def phx_serialize_rule(rule):
-	return phx_client_pack("SIIIII", (rule.appname, rule.pid, rule.direction, rule.verdict, rule.src_zone_id, rule.dst_zone_id))
-
 def phx_serialize_changes(changelist):
 	list_len = len(changelist)
 	result = phx_client_pack("I",(list_len,))
@@ -112,7 +132,8 @@ def phx_serialize_changes(changelist):
 		else:
 			int_mode = 1
 		result += phx_client_pack("I",(int_mode,))
-		result += phx_serialize_rule(rule)
+		#result += phx_serialize_rule(rule)
+		result += rule.serialize()
 	return result
 
 def parse_rule(data, position, zones):
@@ -456,7 +477,7 @@ class MainWindow(gtk.Window):
 		create_cell(self.treeview, "Program", 0)
 		create_cell(self.treeview, "Direction", 2, self.direction_renderer_func)
 		
-		create_cell(self.treeview, "Pid", 1)
+		create_cell(self.treeview, "Pid", 1, self.pid_renderer_func)
 		create_cell(self.treeview, "Verdict", 3, self.verdict_renderer_func)
 		create_cell(self.treeview, "Source zone", 5)
 		create_cell(self.treeview, "Destination zone", 7)
@@ -530,14 +551,28 @@ class MainWindow(gtk.Window):
 		menu_bar = gtk.MenuBar()
 		file_menu = gtk.Menu()
 		quit_item = gtk.MenuItem("Quit")
+		export_rule_item = gtk.MenuItem("Export rules...");
+		file_menu.append(export_rule_item)
 		file_menu.append(quit_item)
 		quit_item.connect_object("activate", self.destroy, "file.quit")
 		quit_item.show()
+		export_rule_item.connect("activate", self.export_rule_clicked)
+		export_rule_item.show()
 		file_item = gtk.MenuItem("File")
 		file_item.show()
 		file_item.set_submenu(file_menu)
 		menu_bar.append(file_item)
 		return menu_bar	
+
+	def export_rule_clicked(self, widget, data = None):
+		chooser = gtk.FileChooserDialog(title=None,action=gtk.FILE_CHOOSER_ACTION_SAVE, buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,gtk.STOCK_SAVE,gtk.RESPONSE_OK))
+		chooser.set_default_response(gtk.RESPONSE_OK)
+		response = chooser.run()
+		if response == gtk.RESPONSE_OK:
+			self.cfg.export_list_store(chooser.get_filename())
+		chooser.destroy()
+
+
 
 	def direction_renderer_func(self, column, cell_renderer, tree_model, titer, userdata = None):
 		val = tree_model.get_value(titer, 2)
@@ -551,12 +586,13 @@ class MainWindow(gtk.Window):
 		val = tree_mode.get_value(titer, 3)
 		cell_renderer.set_property('text', verdict_dir[val])
 
-	def direction_renderer_func(self, column, cell_renderer, tree_model, titer, userdata = None):
-		val = tree_model.get_value(titer, 2)
+
+	def pid_renderer_func(self, column, cell_renderer, tree_model, titer, userdata = None):
+		val = tree_model.get_value(titer, 1)
 		if (val == 0):
-			cell_renderer.set_property('text', "Outbound")
+			cell_renderer.set_property('text', "*")
 		else:
-			cell_renderer.set_property('text', "Inbound")
+			cell_renderer.set_property('text', "%s" % val)
 
 
 	def zone_commit_clicked(self, widget, data = None):
@@ -626,5 +662,6 @@ def main():
 	cfg.apptable = parse_apptable(data, cfg.zones);
 	window = MainWindow(cfg)
 	gtk.main()
-	
+#	cfg.export_list_store("kakukk.txt")	
+
 main()

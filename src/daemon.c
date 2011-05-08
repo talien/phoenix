@@ -139,7 +139,7 @@ GString* resolv_user_alias(GString* username)
 struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 {
 	char phx_buf[4096];
-	int dlen = phx_serialize_data(data, phx_buf);
+	int dlen = phx_serialize_conn_data(data, phx_buf);
 	phx_app_rule* rule;
 	int s, len;
 	guint32 verdict, srczone, destzone, pid;

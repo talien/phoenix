@@ -8,7 +8,7 @@
 extern guchar bin[8];
 
 int
-phx_serialize_data (struct phx_conn_data *data, char *buffer)
+phx_serialize_conn_data (struct phx_conn_data *data, char *buffer)
 {
 	return phx_pack_data("Si4ci4ciiiiSSS", buffer, data->proc_name, &data->pid, data->srcip, &data->sport, data->destip, &data->dport, &data->direction, &data->srczone, &data->destzone, 
 			global_cfg->zone_names[data->srczone], global_cfg->zone_names[data->destzone], data->cmd_line, NULL);
