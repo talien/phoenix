@@ -30,3 +30,31 @@ void phx_conn_data_unref(phx_conn_data* cdata)
 		g_free(cdata);
 	}
 }
+
+phx_app_rule* phx_rule_new()
+{
+	phx_app_rule* result = g_new0(phx_app_rule, 1);
+	result->refcnt = 1;
+	return result;
+}
+
+void phx_rule_ref(phx_app_rule* rule)
+{
+	g_assert(rule->refcnt != 0);
+	rule->refcnt = rule->refcnt + 1;
+}
+
+void phx_rule_unref(phx_app_rule* rule)
+{
+	if (!rule)
+		return;
+	rule->refcnt = rule->refcnt - 1;
+	if (rule->refcnt == 0)
+	{
+		if (rule->appname)
+		{
+			g_string_free(rule->appname, TRUE);
+		}
+		g_free(rule);
+	}
+}

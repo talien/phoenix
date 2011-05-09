@@ -40,11 +40,16 @@ typedef struct phx_app_rule
   guint32 direction;
   guint32 srczone;
   guint32 destzone;
+  guint32 refcnt;
 } phx_app_rule;
 
 
 phx_conn_data* phx_conn_data_new();
 void phx_conn_data_ref(phx_conn_data* cdata);
 void phx_conn_data_unref(phx_conn_data* cdata);
+
+phx_app_rule* phx_rule_new();
+void phx_rule_ref(phx_app_rule* rule);
+void phx_rule_unref(phx_app_rule* rule);
 
 #endif

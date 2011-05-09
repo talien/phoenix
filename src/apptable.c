@@ -42,7 +42,7 @@ guint64 phx_apptable_hash(guint32 direction, guint32 pid, guint32 srczone, guint
 void
 phx_apptable_insert(GString* appname, guint32 pid, int direction, int verdict, guint32 srczone, guint32 destzone)
 {
-	struct phx_app_rule *rule = g_new0(struct phx_app_rule, 1);
+	struct phx_app_rule *rule = phx_rule_new();
 
 	rule->appname = g_string_new(appname->str);
 	rule->pid = pid;
@@ -59,7 +59,7 @@ phx_apptable_insert(GString* appname, guint32 pid, int direction, int verdict, g
 
 	if (!chain)
 	{
-		chain = g_hash_table_new(g_int64_hash, g_int64_equal);
+		chain = g_hash_table_new_full(g_int64_hash, g_int64_equal,g_free,phx_rule_unref);
 		g_hash_table_insert(chain, hash, rule);
 		g_hash_table_insert(apptable, rule->appname->str, chain);
 	} else
