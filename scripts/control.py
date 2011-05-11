@@ -2,10 +2,16 @@
 
 import os,sys,socket, struct
 import gtk
+from optparse import OptionParser
 
 dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
 verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
 verdict_dir = { 0 : "NEW", 1: "ACCEPTED", 2: "DENIED", 3 : "DENY_CONN", 5 : "ACCEPT_CONN", 7 : "ASK", 8 : "WAIT_FOR_ANSWER" }
+options = None
+
+def debug(debug_str):
+	if options.need_debug:
+		print debug_str
 
 class Config:
 	def __init__(self):
@@ -19,10 +25,10 @@ class Config:
 		new_table.export(filename)
 
 	def refresh_liststore(self):
-		print "Refreshing liststore, papptable_len:%d" % len(self.apptable.apptable)
+		debug("Refreshing liststore, papptable_len:%d" % len(self.apptable.apptable))
 		self.liststore.clear()
 		new_table = self.apptable.merge_changes(self.change_store)
-		print "new_table length: %d" % len(new_table.apptable)
+		debug("new_table length: %d" % len(new_table.apptable))
 		new_table.populate(self.liststore)
 
 				
@@ -67,7 +73,7 @@ class Rule:
 			result += " verdict = denied\n"
 		return result
 	def parse(self, data, position, zones):
-		print "Data: %r, position:%d" % (data,position)
+		debug("Data: %r, position:%d" % (data,position))
 		rlen, (pid,verdict,srczone,destzone,direction, appname) = phx_client_unpack("IIIIIS", data[position:])
 		self.__init__(appname, pid, direction, verdict, srczone, zones[srczone][0], destzone, zones[destzone][0])
 		return position + rlen
@@ -79,14 +85,14 @@ class Apptable:
 	def parse(self, data, zones):
 		position = 0;
 		(chains,) = struct.unpack("I",data[position:position+4])
-		print "chain number='%d'" % chains
+		debug("chain number='%d'" % chains)
 		self.apptable = {}
 		position += 4
 		for i in range (0,chains):
 			position = self.parse_chain(data, position, zones)
 		
 	def parse_chain(self, data, position, zones):
-		print "Parsing chain, position='%d'" % position
+		debug("Parsing chain, position='%d'" % position)
 		(hashes,) = struct.unpack("I",data[position:position+4])
 		position = position + 4
 		chain = []
@@ -95,23 +101,22 @@ class Apptable:
 		for i in range(0,hashes):
 			position = rule.parse(data, position, zones)
 			self.add_rule(rule)
-		print "Returning from parse_chain: appname='%s', position='%d'" % (appname, position)
+		debug("Returning from parse_chain: appname='%s', position='%d'" % (appname, position))
 		return position
 	
 	def delete_rule(self, rule):
 		#note: delete chain if become empty
-		print "Deleting rule, %s" % rule
+		debug("Deleting rule, %s" % rule)
 		chain = self.apptable[rule.appname]
 		i = 0
 		for crule in chain:
 			if (rule == crule):
-				print "deleting rule chain:%s id:%d" % (rule.appname, i)
-				print "Deleted rule: %s" % crule
+				debug("Deleted rule, id='%d' rule='%s'" % (i, crule))
 				chain.remove(crule)
 			i += 1
 
 	def add_rule(self, rule):
-		print "Adding rule, %s" % rule
+		debug("Adding rule, %s" % rule)
 		if rule.appname in self.apptable:
 			chain = self.apptable[rule.appname]
 			chain.append(rule)		
@@ -122,16 +127,16 @@ class Apptable:
 
 	def copy(self):
 		new_table = Apptable()
-		print "Copying apptable, chains:%d" % len(self.apptable)
+		debug("Copying apptable, chains:%d" % len(self.apptable))
 		for name, chain in self.apptable.iteritems():
 			new_table.apptable[name] = list(chain)
 		return new_table
 
 	def merge_changes(self, changes):
 		new_table = self.copy()
-		print "merge_changes, new_table_len:%d" % len(new_table.apptable)
+		debug("merge_changes, new_table_len:%d" % len(new_table.apptable))
 		for (ctype,rule) in changes:
-			print "%s" % ctype
+			debug("%s" % ctype)
 #			apptable_dump(new_table)
 			if (ctype == "DELETE"):
 				new_table.delete_rule(rule)
@@ -152,13 +157,13 @@ class Apptable:
 				liststore.append((name, rule.pid, rule.direction, rule.verdict,rule.src_zone_id, rule.source_zone, rule.dst_zone_id, rule.dest_zone))
 
 	def dump(self):
-		print "===="
-		print "Dumping apptable, chain_num='%d'" % len(self.apptable)
+		debug("====")
+		debug("Dumping apptable, chain_num='%d'" % len(self.apptable))
 		for name, chain in self.apptable.iteritems():
-			print "Dumping chain, name='%s', chain_items='%d'" % (name,len(chain))
+			debug("Dumping chain, name='%s', chain_items='%d'" % (name,len(chain)))
 			for rule in chain:
-				print "Rule, rule='%s'" % rule
-		print "===="			
+				debug("Rule, rule='%s'" % rule)
+		debug("====")
 
 class Zones:
 	def __init__(self):
@@ -171,7 +176,7 @@ class Zones:
 		self.zones[0] = ("*","0.0.0.0/0")
 		while position < len(data):
 			(zlen,) = struct.unpack("<I", data[position:position+4])
-			print "Unpacking zone, len='%d', position='%d'" % (zlen, position)
+			debug("Unpacking zone, len='%d', position='%d'" % (zlen, position))
 			position += 4
 			tmp,(zonename, zoneid, network) = phx_client_unpack("SIS", data[position:position+zlen])
 			self.zones[zoneid] = (zonename, network)
@@ -304,10 +309,13 @@ def phx_serialize_changes(changelist):
 
 def send_command(command, cdata = None):
 	s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-	s.connect("phxdsock")
+	if options.socket_file:
+		s.connect(options.socket_file)
+	else:
+		s.connect("phxdsock")
 	s.send(command)
 	data = s.recv(4096)
-	print "len='%d', data='%r'" % (len(data), data)
+	debug("len='%d', data='%r'" % (len(data), data))
 	s.close()
 	return data
 
@@ -609,13 +617,13 @@ class MainWindow(gtk.Window):
 
 	def zone_commit_clicked(self, widget, data = None):
 		data_send = self.cfg.zones.serialize()
-		print "Zone pack test '%r'" % data_send
+		debug("Zones packed: data='%r'" % data_send)
 		data = send_command("SZN"+data_send);
 
 	def zone_edit_clicked(self, widget, data = None):
 		(model, ziter) = self.zoneview.get_selection().get_selected()
 		if (ziter == None):
-			print "No selection"
+			debug("No selection")
 			return
 		win = ZoneEditWindow(ziter,self.cfg)
 		win.show()
@@ -639,7 +647,7 @@ class MainWindow(gtk.Window):
 	def rule_edit_clicked(self, widget, data = None):
 		(model, riter) = self.treeview.get_selection().get_selected()
 		if (riter == None):
-			print "No selection"
+			debug("No selection")
 			return
 		win = RuleEditWindow(riter, self.cfg)
 		win.set_title("Edit rule")
@@ -654,7 +662,7 @@ class MainWindow(gtk.Window):
 
 	def rule_commit_clicked(self, widget, data = None):
 		data = phx_serialize_changes(self.cfg.change_store)
-		print "Data serialized %r" % data
+		debug("Data serialized; data='%r'" % data)
 		send_command("SET"+data)
 
 	def zone_add_clicked(self, widget, data = None):
@@ -666,6 +674,12 @@ class MainWindow(gtk.Window):
 		return False
 	
 def main():
+	global options
+	parser = OptionParser()
+	parser.add_option("-s", "--socket", dest="socket_file", help="Daemon socket to connect", metavar="FILE")
+	parser.add_option("-d", "--debug", dest="need_debug", action="store_true", default=False, help="Enabling debug mode")
+	(options, args) = parser.parse_args()
+
 	cfg = Config()
 	data = send_command("GZN");
 	cfg.zones = Zones()
