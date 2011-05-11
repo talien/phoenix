@@ -61,7 +61,7 @@ phx_apptable_insert(GString* appname, guint32 pid, int direction, int verdict, g
 	{
 		chain = g_hash_table_new_full(g_int64_hash, g_int64_equal,g_free,phx_rule_unref);
 		g_hash_table_insert(chain, hash, rule);
-		g_hash_table_insert(apptable, rule->appname->str, chain);
+		g_hash_table_insert(apptable, g_strdup(rule->appname->str), chain);
 	} else
 	{
 		g_hash_table_insert(chain, hash, rule);
@@ -71,6 +71,7 @@ phx_apptable_insert(GString* appname, guint32 pid, int direction, int verdict, g
 
 void phx_apptable_delete(GString* appname, guint32 pid, int direction, guint32 srczone, guint32 destzone)
 {
+	log_debug("Deleting rule, appname='%s'\n", appname->str);
 	phx_apptable_lock_write();
 	GHashTable *chain = g_hash_table_lookup(apptable, appname->str);
 	if (!chain)
@@ -203,7 +204,7 @@ char* phx_apptable_serialize(int* length)
 phx_app_rule* phx_rule_deserialize(char* buffer, int* len)
 {
 	int rlen;
-	phx_app_rule *rule = g_new0(phx_app_rule,1);
+	phx_app_rule *rule = phx_rule_new();
 	rule->appname = g_string_new("");
 	rlen = phx_unpack_data("Siiiii",buffer,rule->appname, &rule->pid, &rule->direction, &rule->verdict, &rule->srczone, &rule->destzone, NULL);
 	log_debug("Rule deserialized, len='%d'\n", rlen);
@@ -223,11 +224,11 @@ struct phx_app_rule *phx_apptable_lookup(GString * appname, guint pid,
 					 guint direction, guint32 srczone, guint32 destzone)
 {
 	log_debug
-	    ("Looking for app in hashtable, app='%s', pid='%d', direction='%d', srczone='%d', destzone='%d' \n",
+	    ("Looking for app in hashtable, apptable_size='%d', app='%s', pid='%d', direction='%d', srczone='%d', destzone='%d' \n",g_hash_table_size(apptable),
 	     appname->str, pid, direction, srczone, destzone);
     phx_apptable_lock_read();
-	GHashTable *chain = g_hash_table_lookup(apptable, appname->str);
-
+	GHashTable *chain = NULL;
+	chain = g_hash_table_lookup(apptable, appname->str);
 	if (!chain)
 	{
 		log_debug("Chain not found for app: app='%s'\n", appname->str);
@@ -275,15 +276,17 @@ void phx_apptable_merge_rule(GString* appname, guint32 direction, guint32 pid, g
 	if (chain == NULL)
 	{
 		phx_apptable_unlock_write();
+		log_debug("Chain not found for rule, inserting one\n");
 		phx_apptable_insert(appname, pid, direction, verdict, srczone, destzone);
 		return;
 	}
-	phx_app_rule* rule = g_new0(phx_app_rule,1);
+	phx_app_rule* rule = phx_rule_new();
 	rule->appname = g_string_new(appname->str);
 	rule->pid = pid;
 	rule->direction = direction;
 	rule->srczone = srczone;
 	rule->destzone = destzone;
+	rule->verdict = verdict;
 	g_hash_table_foreach_remove(chain, phx_apptable_merge_rule_foreach, rule);
  	guint64 *hash = g_new0(guint64, 1);
 	*hash = phx_apptable_hash(rule->direction, rule->pid, rule->srczone, rule->destzone);

@@ -212,8 +212,8 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	data->srczone = srczone;
 	data->destzone = destzone;
 	data->pid = pid;
-	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
 	log_debug ("Data from GUI: verdict='%d', srczone='%d', destzone='%d', pid='%d'\n", data->state, data->srczone, data->destzone, data->pid);
+	phx_apptable_merge_rule(data->proc_name, data->direction, data->pid, data->srczone, data->destzone, data->state);
 	phx_conn_data_unref(data);
 	close(s);
 	return data;
