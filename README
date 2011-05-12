@@ -16,5 +16,6 @@ Create a file named phx.conf, and add the following contents:
 where username is your username, local network is the network ip/mask, with your primary ip address.
 mask can only be a number (not a metmask)
 
+run setup-iptables.sh with root. Warning! This will delete your previous iptables settings in filter table!!!!
 start client.py with your user, and the start "phoenix -f <conf_file_path_and_name>" as root.
 
