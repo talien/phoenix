@@ -206,11 +206,12 @@ void restore_iptables()
 
 }
 
-void setup_iptables(char* buffer)
+void setup_iptables()
 {
 	log_debug("Setting up iptables\n");
 	char* argv[] = { "/sbin/iptables-restore", NULL };
 	int fd = exec_with_fd(0, argv);
-	write(fd, buffer, strlen(buffer));
+	write(fd, rules, strlen(rules));
+	close(fd);
 }
 #endif
