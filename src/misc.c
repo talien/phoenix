@@ -1,5 +1,5 @@
-#ifndef _PHX_MISC_H
-#define _PHX_MISC_H
+#ifndef _PHX_MISC_C
+#define _PHX_MISC_C
 #include <stdio.h>
 #include <glib.h>
 #include <unistd.h>
@@ -7,11 +7,32 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 #include <syslog.h>
 #include "config.h"
+#include "misc.h"
 
+char* rules = 
+"*filter\n\
+:INPUT ACCEPT [0:0]\n\
+:FORWARD ACCEPT [0:0]\n\
+:OUTPUT ACCEPT [0:0]\n\
+:newinqueue - [0:0]\n\
+:newoutqueue - [0:0]\n\
+:rejectoutqueue - [0:0]\n\
+-A INPUT -m mark --mark 0x1/0xff -j newinqueue\n\
+-A INPUT -p tcp -m state --state NEW -j NFQUEUE --queue-num 1\n\
+-A OUTPUT -m mark --mark 0x2/0xff -j newoutqueue\n\
+-A OUTPUT -m mark --mark 0x3/0xff -j rejectoutqueue\n\
+-A OUTPUT -p tcp -m state --state NEW -j NFQUEUE --queue-num 0\n\
+-A newinqueue -j NFQUEUE --queue-num 2\n\
+-A newoutqueue -j NFQUEUE --queue-num 3\n\
+-A rejectoutqueue -j REJECT --reject-with icmp-port-unreachable\n\
+COMMIT\n\
+";
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
     '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'
 };
@@ -27,28 +48,7 @@ void phx_close_log()
 };
 
 void
-log_debug (gchar * format, ...)
-{
-    va_list l;
-
-    gchar msgbuf[2048];
-    struct timeval tv;
-    int sec, msec;
-    if (!gettimeofday(&tv,NULL)) 
-    {
-		sec = tv.tv_sec;
-		msec = tv.tv_usec;
-    }
-    
-    va_start (l, format);
-    g_vsnprintf (msgbuf, sizeof (msgbuf), format, l);
-    printf ("[%d:%d] %s", sec, msec, msgbuf);
-    va_end (l);
-
-}
-
-void
-_log_trace( int debug, gchar* function, gchar* file, int line, gchar* format, ...)
+_log_trace( int debug, const char* function, const char* file, int line, gchar* format, ...)
 {
     va_list l;
     gchar msgbuf[2048];
@@ -141,4 +141,76 @@ int parse_network(char* str, guchar* nw, guint32* mask)
 	return TRUE;
 }	
 
+int exec_with_fd(int open_fd, char** argv)
+{
+	int pipe_fd[2];
+	int oldstream = dup(open_fd);
+	pipe(pipe_fd);
+	dup2(pipe_fd[open_fd],open_fd);
+	int pid = fork();
+	if (pid == 0)
+	{
+		close(pipe_fd[1-open_fd]);
+		execv(argv[0], argv);
+		
+	}
+	else
+	{
+		close(open_fd);
+		close(pipe_fd[open_fd]);
+		dup2(oldstream, open_fd);
+		return pipe_fd[1-open_fd];
+	}
+}
+
+void save_iptables()
+{
+	log_debug("Saving iptables\n");
+	char buffer[4096];
+	char* argv[] = { "/sbin/iptables-save", NULL };
+	int fd = exec_with_fd(1, argv);
+	int wfd = open("phx.tables", O_CREAT | O_WRONLY, 00700);
+	if (wfd < 0)
+	{
+		log_debug("Cannot create tables file\n");
+		return;
+	}
+	int bytes = 0;
+	while ((bytes = read(fd, buffer, sizeof(buffer))) > 0)
+	{
+		write(wfd, buffer, bytes);
+	}
+	close(fd);
+	close(wfd);
+}
+
+void restore_iptables()
+{
+	log_debug("Restoring iptables\n");
+	char buffer[4096];
+	char* argv[] = { "/sbin/iptables-restore", NULL };
+    int fd = exec_with_fd(0, argv);
+    int rfd = open("phx.tables", O_RDONLY);
+    if (rfd < 0)
+    {
+        log_debug("Cannot open tables file\n");
+        return;
+    }
+    int bytes = 0;
+    while ((bytes =read(rfd, buffer, sizeof(buffer))) > 0)
+    {
+        write(fd, buffer, bytes);
+    }
+    close(fd);
+    close(rfd);
+
+}
+
+void setup_iptables(char* buffer)
+{
+	log_debug("Setting up iptables\n");
+	char* argv[] = { "/sbin/iptables-restore", NULL };
+	int fd = exec_with_fd(0, argv);
+	write(fd, buffer, strlen(buffer));
+}
 #endif

@@ -494,6 +494,8 @@ exit:
 
 	g_async_queue_unref(to_gui);
 
+	restore_iptables();
+
 	log_error("phoenix firewall exited\n");
 
 	return 0;

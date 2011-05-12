@@ -382,4 +382,6 @@ void phx_init_config(int* argc, char*** argv)
 	phx_init_log();
 	global_cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
 	global_cfg->zones = zone_new();
+	save_iptables();
+	setup_iptables();
 };

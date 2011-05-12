@@ -17,6 +17,9 @@ typedef struct nf_queue_data
 
 } nf_queue_data;
 
+#define PHX_CONF_FILE "/etc/phx.conf"
+#define PHX_SOCKET_DIR "/var/run/phx/"
+
 #ifdef _PHX_DAEMON_C
 
 nf_queue_data qdata;

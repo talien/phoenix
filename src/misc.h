@@ -17,10 +17,12 @@
 int get_val_from_hex(char hex);
 GString* phx_write_ip(char ip[4]);
 GString* phx_dns_lookup(char ip[4]);
-int parse_network(const char* str, guchar* nw, guint32 *mask);
+int parse_network(char* str, guchar* nw, guint32 *mask);
 void _log_trace(int debug,  const char* function, const char* file, int line, gchar* format, ...);
 void phx_init_log();
 void phx_close_log();
-
+void save_iptables();
+void restore_iptables();
+void setup_iptables();
 
 #endif
