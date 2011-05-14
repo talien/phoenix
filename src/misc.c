@@ -169,6 +169,7 @@ void save_iptables()
 	char buffer[4096];
 	char* argv[] = { "/sbin/iptables-save", NULL };
 	int fd = exec_with_fd(1, argv);
+	unlink("phx.tables");
 	int wfd = open("phx.tables", O_CREAT | O_WRONLY, 00700);
 	if (wfd < 0)
 	{
