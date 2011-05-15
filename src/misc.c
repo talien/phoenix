@@ -125,19 +125,24 @@ phx_dns_lookup (char ip[4])
 
 int parse_network(char* str, guchar* nw, guint32* mask)
 {
-    int i, j, prev = 0;
+    int i, j, prev = 0, num;
 	char endch = '.';
 	for (j=0; j<4; j++)
 	{
 		if (j == 3) endch = '/';
 		for (i = prev; str[i] != endch && str[i] != '\0'; i++)
-			if (str[i] == '\0')
+			if ((str[i] == '\0') || ( (str[i] != '.') && (str[i] != '/') && ((str[i] < '0') || (str[i] > '9')) ))
 				return FALSE;
 		str[i] = '\0';
-		nw[j] = (char)atoi(str+prev);
+		num = atoi(str+prev);
+		if ((num < 0) || (num > 255))
+			return FALSE;
+		nw[j] = num;
 		prev = i+1;
 	}
 	*mask = atoi(str+prev);
+	if ((*mask < 0) || (*mask > 32))
+		return FALSE;
 	return TRUE;
 }	
 

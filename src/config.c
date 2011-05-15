@@ -352,7 +352,11 @@ int phx_parse_config(const char* filename)
 			else if (cfg_state.state == PHX_STATE_ZONE)
 			{
 				log_debug("Adding zone: name='%s', network='%s', zoneid='%d' \n", var1, var2, zoneid);
-				parse_network(var2, buf, &mask);
+				if (!parse_network(var2, buf, &mask))
+				{
+					log_error("Invalid network in zone file!\n");
+					return FALSE;
+				}
 				zone_add(global_cfg->zones, buf, mask, zoneid);
 				global_cfg->zone_names[zoneid] = g_string_new(var1);
 				zoneid += 1;

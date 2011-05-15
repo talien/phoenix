@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import os,sys,socket, struct
+import os,sys,socket, struct, re
 import gtk
 from optparse import OptionParser
 
@@ -469,11 +469,27 @@ class ZoneEditWindow(gtk.Window):
 		self.show_all()
 
 	def ok_button_clicked(self, widget, data=None):
-		if (self.ziter !=None):
-			self.cfg.zones.modify(self.ziter, self.name_entry.get_text(), self.network_entry.get_text())
+		correct = True
+		network = self.network_entry.get_text()
+		match = a = re.match("^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)",network)
+		if match == None or len(match.groups()) != 5:
+			correct = False
 		else:
-			self.cfg.zones.add(self.zid, self.name_entry.get_text(),self.network_entry.get_text())
-		self.destroy()
+			for i in range(0,4):
+				if int(match.groups()[i]) < 0 or int(match.groups()[i]) > 255:
+					correct = False
+			if int(match.groups()[4]) < 0 or int(match.groups()[4]) > 32:
+				correct = False
+		if correct:
+			if (self.ziter !=None):
+				self.cfg.zones.modify(self.ziter, self.name_entry.get_text(), self.network_entry.get_text())
+			else:
+				self.cfg.zones.add(self.zid, self.name_entry.get_text(),self.network_entry.get_text())
+			self.destroy()
+		else:
+			dialog = gtk.MessageDialog(self, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "Invalid network!")
+			dialog.run()
+			dialog.destroy()
 
 	def cancel_button_clicked(self, widget, data=None):
 		self.destroy()
