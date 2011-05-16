@@ -299,9 +299,43 @@ int phx_parse_config(const char* filename)
 				{
 					global_cfg->rule_file = g_string_new(var2);
 				}
-				else 
+				else if (!strncmp(var1, "inbound_deny", 128)) 
+				{
+					if (!strncmp(var2, "drop", 128))
+					{
+						global_cfg->inbound_deny = FALSE;
+					}
+					else if (!strncmp(var2, "reject", 128))
+					{
+						global_cfg->inbound_deny = TRUE;
+					}
+					else
+					{
+						log_error("Wrong deny value in inbound_deny\n");
+						return FALSE;
+					}
+				}
+				else if (!strncmp(var1, "outbound_deny", 128))
+				{
+					if (!strncmp(var2, "drop", 128))
+					{
+						global_cfg->outbound_deny = FALSE;
+					}
+					else if (!strncmp(var2, "reject", 128))
+					{
+						global_cfg->outbound_deny = TRUE;
+					}
+					else
+					{
+						log_error("Wrong deny value in outbound_deny\n");
+						return FALSE;
+					}
+
+				}
+				else
 				{
 					log_error("Unknown key in settings section, key='%s'\n", var1);
+					return FALSE;
 				}
 			
 			}
@@ -382,6 +416,8 @@ void phx_init_config(int* argc, char*** argv)
 	global_cfg = g_new0(phx_config,1);
 	global_cfg->logging_mode = PHX_CFG_LOG_STDERR;
 	global_cfg->zone_names = g_new0(GString*, 256);
+	global_cfg->inbound_deny = FALSE;
+	global_cfg->outbound_deny = TRUE;
 	phx_parse_command_line(argc, argv);
 	phx_init_log();
 	global_cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);

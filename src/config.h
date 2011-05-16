@@ -18,6 +18,7 @@ typedef struct phx_config
 	struct radix_bit* zones;
 	GString** zone_names;
 	GHashTable* aliases;
+	gboolean inbound_deny, outbound_deny;
 } phx_config;
 
 #ifdef _PHX_CONFIG_C

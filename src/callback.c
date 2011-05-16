@@ -168,12 +168,23 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 				  conndata->proc_name->str);
 			if (direction == OUTBOUND)
 			{
-				nfq_verdict = NF_REPEAT;
-				mark = 0x3;
+				if (global_cfg->outbound_deny)
+				{
+					nfq_verdict = NF_REPEAT;
+					mark = 0x3;
+				}
+				else
+					nfq_verdict = NF_DROP;
 			}
 			else
 			{
-				nfq_verdict = NF_DROP;
+				if (global_cfg->inbound_deny)
+				{
+					nfq_verdict = NF_REPEAT;
+					mark = 0x4;
+				}
+				else
+					nfq_verdict = NF_DROP;
 			}
 		}
 		if (rule->verdict == WAIT_FOR_ANSWER)
@@ -210,13 +221,25 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			rule->verdict = ASK;
 			if (direction == OUTBOUND)
 			{
-				nfq_verdict = NF_REPEAT;
-				mark = 0x3;
+				if (global_cfg->outbound_deny)
+				{
+					nfq_verdict = NF_REPEAT;
+					mark = 0x3;
+				}
+				else
+					nfq_verdict = NF_DROP;
 			}
 			else
 			{
-				nfq_verdict = NF_DROP;
+				if (global_cfg->inbound_deny)
+				{
+					nfq_verdict = NF_REPEAT;
+					mark = 0x4;
+				}
+				else
+					nfq_verdict = NF_DROP;
 			}
+
 		}
 	} else
 	{

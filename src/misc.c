@@ -23,7 +23,9 @@ char* rules =
 :newinqueue - [0:0]\n\
 :newoutqueue - [0:0]\n\
 :rejectoutqueue - [0:0]\n\
+:rejectinqueue - [0:0]\n\
 -A INPUT -m mark --mark 0x1/0xff -j newinqueue\n\
+-A INPUT -m mark --mark 0x4/0xff -j rejectinqueue\n\
 -A INPUT -p tcp -m state --state NEW -j NFQUEUE --queue-num 1\n\
 -A OUTPUT -m mark --mark 0x2/0xff -j newoutqueue\n\
 -A OUTPUT -m mark --mark 0x3/0xff -j rejectoutqueue\n\
@@ -31,6 +33,7 @@ char* rules =
 -A newinqueue -j NFQUEUE --queue-num 2\n\
 -A newoutqueue -j NFQUEUE --queue-num 3\n\
 -A rejectoutqueue -j REJECT --reject-with icmp-port-unreachable\n\
+-A rejectinqueue -j REJECT --reject-with icmp-port-unreachable\n\
 COMMIT\n\
 ";
 static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
