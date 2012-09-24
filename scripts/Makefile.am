@@ -1,1 +1,1 @@
-bin_SCRIPTS = control.py client.py setup-iptables.sh
+bin_SCRIPTS = phxcontrol.py phxclient.py

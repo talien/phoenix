@@ -8,6 +8,7 @@ dir_const = { "OUTBOUND" : 0, "INBOUND" : 1 }
 verdict_const = { "NEW" : 0 , "ACCEPTED" : 1, "DENIED" : 2, "DENY_CONN" : 3, "ACCEPT_CONN": 5, "ASK" : 7, "WAIT_FOR_ANSWER" : 8}
 verdict_dir = { 0 : "NEW", 1: "ACCEPTED", 2: "DENIED", 3 : "DENY_CONN", 5 : "ACCEPT_CONN", 7 : "ASK", 8 : "WAIT_FOR_ANSWER" }
 options = None
+socket_path = "/var/run/"
 
 def debug(debug_str):
 	if options.need_debug:
@@ -312,7 +313,7 @@ def send_command(command, cdata = None):
 	if options.socket_file:
 		s.connect(options.socket_file)
 	else:
-		s.connect("phxdsock")
+		s.connect(socket_path + "phxdsock")
 	s.send(command)
 	data = s.recv(4096)
 	debug("len='%d', data='%r'" % (len(data), data))

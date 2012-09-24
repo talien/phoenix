@@ -26,6 +26,9 @@
 #include "config.h"
 #include "data.h"
 
+#define PHX_SOCKET_PATH "/var/run/"
+#define PHX_CLIENT_PATH "/tmp/"
+
 GCond *pending_cond;
 
 GMutex *cond_mutex;
@@ -39,7 +42,7 @@ int init_daemon_socket()
 	int len;
 	int daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 	local.sun_family = AF_UNIX;
-	strcpy(local.sun_path,"phxdsock");
+	strcpy(local.sun_path,PHX_SOCKET_PATH "phxdsock");
 	len = strlen(local.sun_path) + sizeof(local.sun_family);
 	unlink(local.sun_path);
 	if (bind(daemon_socket, (struct sockaddr *)&local, len) == -1)
@@ -173,7 +176,7 @@ struct phx_conn_data *send_conn_data(struct phx_conn_data *data)
 	//lookup username in aliases
 	aname = resolv_user_alias(uname);
 	g_string_free(uname, TRUE);
-	aname = g_string_prepend(aname, "phxsock-");
+	aname = g_string_prepend(aname, PHX_CLIENT_PATH "phxsock-");
 
 	strcpy(remote.sun_path, aname->str);
 	len = strlen(remote.sun_path) + sizeof(remote.sun_family);
@@ -253,11 +256,25 @@ struct pollfd polls[4];
 
 struct timespec ival;
 
+gint nf_handle_packet(int fd, struct nfq_handle *handle)
+{
+    char buf[65536];
+	int rv = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
+	if (rv > 0)
+	{
+		log_debug("Packet received in outbound pending queue\n");
+		nfq_handle_packet(handle, buf, rv);
+		log_debug("Packet handled\n");
+	    return TRUE;
+	}
+    return FALSE;
+
+} 
+
 //main processing iteration, processing normal queues (inbound, and outbound)
 gint main_loop_iterate()
 {
-	char buf[4096];
-	int ret, rv;
+	int ret;
 
 	polls[0].fd = qdata.out_fd;
 	polls[0].events = POLLIN | POLLPRI;
@@ -268,25 +285,11 @@ gint main_loop_iterate()
 	{
 		if ((polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI))
 		{
-			while ((rv =
-				recv(qdata.out_fd, buf, sizeof(buf),
-				     MSG_DONTWAIT)) && rv > 0)
-			{
-				log_debug("Packet received on out_fd\n");
-				nfq_handle_packet(qdata.out_handle, buf, rv);
-				log_debug("Packet handled on out_fd\n");
-			}
+			while (nf_handle_packet(qdata.out_handle, qdata.out_fd)) {};
 		}
 		if ((polls[1].revents & POLLIN) || (polls[1].revents & POLLPRI))
 		{
-			while ((rv =
-				recv(qdata.in_fd, buf, sizeof(buf), MSG_DONTWAIT))
-			       && rv > 0)
-			{
-				log_debug("Packet received on in_fd\n");
-				nfq_handle_packet(qdata.in_handle, buf, rv);
-				log_debug("Packet handled on in_fd\n");
-			}
+			while (nf_handle_packet(qdata.in_handle, qdata.in_fd)) {};
 		}
 
 	}
@@ -302,8 +305,6 @@ we can only(?) estimate the size of the pending queue
 */
 gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 {
-	char buf[4096];
-	int rv;
 	cond_mutex = g_mutex_new();
 	pending_cond = g_cond_new();
 	while (!end)
@@ -331,17 +332,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = pending_conn_count;
 				for (i = 0; i < now_count; i++)
 				{
-					rv = recv(qdata.out_pending_fd, buf,
-						  sizeof(buf), MSG_DONTWAIT);
-					if (rv > 0)
-					{
-						log_debug
-						    ("Packet received in outbound pending queue\n");
-						nfq_handle_packet
-						    (qdata.out_pending_handle,
-						     buf, rv);
-						log_debug("Packet handled\n");
-					}
+					nf_handle_packet(qdata.out_pending_fd, qdata.out_pending_handle);
 				}
 			}
 			if (((polls[1].revents & POLLIN)
@@ -350,17 +341,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = in_pending_count;
 				for (i = 0; i < now_count; i++)
 				{
-					rv = recv(qdata.in_pending_fd, buf,
-						  sizeof(buf), MSG_DONTWAIT);
-					if (rv > 0)
-					{
-						log_debug
-						    ("Packet received in inbound pending queue\n");
-						nfq_handle_packet
-						    (qdata.in_pending_handle,
-						     buf, rv);
-						log_debug("Packet handled\n");
-					}
+					nf_handle_packet(qdata.in_pending_fd, qdata.in_pending_handle);
 				}
 			}
 		}

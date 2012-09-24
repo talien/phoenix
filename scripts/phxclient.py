@@ -107,15 +107,13 @@ def process_data(data):
 def gui_callback(source,condition,lsock):
 	(newsock,tmp) = lsock.accept()
 	data = newsock.recv(4096)
-	print "data got, length='%d', data='%r'" % (len(data), data)
 	send_data = process_data(data)
-	print "sending data: '%r'" % send_data
 	newsock.send(send_data)
 	newsock.close()
 	return True
 
 def setup_socket():
-	sock_name = "phxsock-" + getpass.getuser()
+	sock_name = "/tmp/phxsock-" + getpass.getuser()
 	if (os.path.exists(sock_name)):
 		os.unlink(sock_name)
 	listen_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
