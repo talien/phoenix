@@ -2,13 +2,11 @@
 #include <sys/un.h>
 #include "serialize.h"
 #include <libnetfilter_queue/libnetfilter_queue.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <asm/types.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <netinet/in.h>
-#include <linux/netfilter.h>
 #include <time.h>
 #include <sys/poll.h>
 #include <sys/un.h>
@@ -38,9 +36,9 @@ int end = 0;
 int init_daemon_socket()
 {
 	struct sockaddr_un local;
-
 	int len;
 	int daemon_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+
 	local.sun_family = AF_UNIX;
 	strcpy(local.sun_path,PHX_SOCKET_PATH "phxdsock");
 	len = strlen(local.sun_path) + sizeof(local.sun_family);
@@ -254,42 +252,25 @@ gpointer gui_ipc_thread(gpointer data G_GNUC_UNUSED)
 
 struct pollfd polls[4];
 
-struct timespec ival;
-
-gint nf_handle_packet(int fd, struct nfq_handle *handle)
-{
-    char buf[65536];
-	int rv = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
-	if (rv > 0)
-	{
-		log_debug("Packet received in outbound pending queue\n");
-		nfq_handle_packet(handle, buf, rv);
-		log_debug("Packet handled\n");
-	    return TRUE;
-	}
-    return FALSE;
-
-} 
-
 //main processing iteration, processing normal queues (inbound, and outbound)
 gint main_loop_iterate()
 {
 	int ret;
 
-	polls[0].fd = qdata.out_fd;
+	polls[0].fd = qdata.out.fd;
 	polls[0].events = POLLIN | POLLPRI;
-	polls[1].fd = qdata.in_fd;
+	polls[1].fd = qdata.in.fd;
 	polls[1].events = POLLIN | POLLPRI;
 	ret = poll(polls, 2, -1);
 	if (ret > 0)
 	{
 		if ((polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI))
 		{
-			while (nf_handle_packet(qdata.out_handle, qdata.out_fd)) {};
+			while (nf_queue_handle_packet(&qdata.out)) {};
 		}
 		if ((polls[1].revents & POLLIN) || (polls[1].revents & POLLPRI))
 		{
-			while (nf_handle_packet(qdata.in_handle, qdata.in_fd)) {};
+			while (nf_queue_handle_packet(&qdata.in)) {};
 		}
 
 	}
@@ -317,9 +298,9 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 		int ret;
 		int now_count;
 
-		polls[0].fd = qdata.out_pending_fd;
+		polls[0].fd = qdata.out_pending.fd;
 		polls[0].events = POLLIN | POLLPRI;
-		polls[1].fd = qdata.in_pending_fd;
+		polls[1].fd = qdata.in_pending.fd;
 		polls[1].events = POLLIN | POLLPRI;
 		log_debug("Polling in pending thread\n");
 		ret = poll(polls, 2, 0);
@@ -332,7 +313,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = pending_conn_count;
 				for (i = 0; i < now_count; i++)
 				{
-					nf_handle_packet(qdata.out_pending_fd, qdata.out_pending_handle);
+					nf_queue_handle_packet(&qdata.out_pending);
 				}
 			}
 			if (((polls[1].revents & POLLIN)
@@ -341,66 +322,12 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 				now_count = in_pending_count;
 				for (i = 0; i < now_count; i++)
 				{
-					nf_handle_packet(qdata.in_pending_fd, qdata.in_pending_handle);
+					nf_queue_handle_packet(&qdata.in_pending);
 				}
 			}
 		}
 	}
 	return NULL;
-}
-
-/* initializing netlink queues
-4 queues - 2 onbound, 2 outbound (normal+pending per direction)
-pendign queues are for packets, which hasn't been confirmed from gui */
-int
-init_queue(struct nfq_handle **handle, struct nfq_q_handle **qhandle,
-	   int *fd, nfq_callback * cb, int queue_num)
-{
-	int *data;
-	data = g_new0(int,1);
-	*data = queue_num;
-	(*handle) = nfq_open();
-	if (!(*handle))
-	{
-		log_error("Error occured during opening netfilter queue");
-		return -1;
-	}
-	if (nfq_unbind_pf((*handle), AF_INET) < 0)
-	{
-		log_error("Unbinding, ignoring error");
-		return -1;
-	}
-	log_debug("Binding protocol\n");
-	if (nfq_bind_pf((*handle), AF_INET) < 0)
-	{
-		log_error("Error in nf_queue binding");
-		return -1;
-	}
-	log_debug("Creating netfilter queue\n");
-	(*qhandle) = nfq_create_queue((*handle), queue_num, cb, data);
-	if (!(*qhandle))
-	{
-		log_error("Error in creating queue");
-		return -1;
-	}
-	log_debug("Setting mode for netfilter queue\n");
-	if (nfq_set_mode((*qhandle), NFQNL_COPY_PACKET, 0) < 0)
-	{
-		log_error("Error setting netfilter queue mode");
-		return -1;
-	}
-	(*fd) = nfq_fd((*handle));
-	log_debug("Netfilter queue fd; fd='%d'\n", (*fd));
-	return 0;
-
-}
-
-void close_queue(struct nfq_handle *handle, struct nfq_q_handle *qhandle)
-{
-	log_debug("Destroying netfilter queue\n");
-	nfq_destroy_queue(qhandle);
-	log_debug("Destroy netfilter handle\n");
-	nfq_close(handle);
 }
 
 void signal_quit(int signum G_GNUC_UNUSED)
@@ -415,12 +342,10 @@ int main(int argc, char **argv)
 	log_error("phoenix firewall starting up\n");
 	log_debug("Opening netlink connections\n");
 
-	init_queue(&qdata.in_handle, &qdata.in_qhandle, &qdata.in_fd, phx_queue_callback, 1);
-	init_queue(&qdata.out_handle, &qdata.out_qhandle, &qdata.out_fd, phx_queue_callback, 0);
-	init_queue(&qdata.out_pending_handle, &qdata.out_pending_qhandle, &qdata.out_pending_fd,
-		   phx_queue_callback, 3);
-	init_queue(&qdata.in_pending_handle, &qdata.in_pending_qhandle, &qdata.in_pending_fd,
-		   phx_queue_callback, 2);
+    nf_queue_init(&qdata.out, 0, phx_queue_callback);
+    nf_queue_init(&qdata.in, 1, phx_queue_callback);
+    nf_queue_init(&qdata.in_pending, 2, phx_queue_callback);
+    nf_queue_init(&qdata.out_pending, 3, phx_queue_callback);
 
 	log_debug("Netlink connections opened\n");
 
@@ -462,10 +387,10 @@ exit:
 
 	log_debug("Closing netlink connections\n");
 
-	close_queue(qdata.out_handle, qdata.out_qhandle);
-	close_queue(qdata.in_handle, qdata.in_qhandle);
-	close_queue(qdata.out_pending_handle, qdata.out_pending_qhandle);
-	close_queue(qdata.in_pending_handle, qdata.in_pending_qhandle);
+	nf_queue_close(&qdata.out);
+	nf_queue_close(&qdata.in);
+	nf_queue_close(&qdata.out_pending);
+	nf_queue_close(&qdata.in_pending);
 
 	log_debug("Thread exited!\n");
 	if (pending_thread)
