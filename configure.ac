@@ -23,4 +23,4 @@ AC_TYPE_SIZE_T
 AC_CHECK_FUNCS([gettimeofday memset socket])
 
 AC_CONFIG_FILES([Makefile])
-AC_OUTPUT([src/Makefile scripts/Makefile])
+AC_OUTPUT([src/Makefile scripts/Makefile tests/Makefile])
