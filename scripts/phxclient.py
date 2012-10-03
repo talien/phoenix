@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import gtk, gobject, glib
 import os,sys,socket, getpass, struct
+from phxlib import *
 
 dir_map = { 0 : "Outbound", 1 : "Inbound" }
 
@@ -62,38 +63,9 @@ class ClientWindow(gtk.Dialog):
 			dz = 0
 
 		return (pid, sz, dz)
-		
-		
-
-def phx_client_unpack(sformat, data):
-	i = 0
-	amount = 0
-	pd = 0
-	t = ()
-	while i < len(sformat):
-		needpack = True
-		if ( sformat[i] == 'S' ):
-			(slen,) = struct.unpack("<I", data[pd:pd+4])
-			pd += 4
-			gvar = struct.unpack("%ds" % slen, data[pd:pd+slen])
-			pd += slen
-		elif ( sformat[i] == 'I' ):
-			gvar = struct.unpack("<I", data[pd:pd+4])
-			pd += 4
-		elif( sformat[i] <= '9' and sformat[i] >= '0'):
-			amount = amount*10 + (ord(sformat[i]) - 48);
-			needpack = False
-		elif ( sformat[i] == 's'):
-			gvar = struct.unpack("%ds" % amount, data[pd:pd+amount])
-			pd += amount;
-		if needpack:
-			t = t + gvar
-			amount = 0
-		i += 1
-	return t
 
 def process_data(data):
-	(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name, cmd_line) = phx_client_unpack("SI4sI4sIIIISSS",data)
+	(bytes_num, (process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name, cmd_line)) = phx_client_unpack("SI4sI4sIIIISSS",data)
 	dialog = ClientWindow(process_name, pid, srcip, sport, destip, dport, direction, srczone, destzone, sz_name, dz_name, cmd_line)
 	resp = dialog.run()
 	if (resp == gtk.RESPONSE_YES):

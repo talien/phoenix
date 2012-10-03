@@ -410,18 +410,24 @@ int phx_parse_config(const char* filename)
 	return TRUE;
 }
 
+phx_config* phx_config_new()
+{
+    phx_config* cfg; 
+    cfg = g_new0(phx_config,1);
+	cfg->logging_mode = PHX_CFG_LOG_STDERR;
+	cfg->zone_names = g_new0(GString*, 256);
+	cfg->inbound_deny = FALSE;
+	cfg->outbound_deny = TRUE;
+	cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
+	cfg->zones = zone_new();
+	return cfg;
+}
 
 void phx_init_config(int* argc, char*** argv)
 {
-	global_cfg = g_new0(phx_config,1);
-	global_cfg->logging_mode = PHX_CFG_LOG_STDERR;
-	global_cfg->zone_names = g_new0(GString*, 256);
-	global_cfg->inbound_deny = FALSE;
-	global_cfg->outbound_deny = TRUE;
+    global_cfg = phx_config_new();
 	phx_parse_command_line(argc, argv);
 	phx_init_log();
-	global_cfg->aliases = g_hash_table_new((GHashFunc)g_string_hash, (GEqualFunc)g_string_equal);
-	global_cfg->zones = zone_new();
 	save_iptables();
 	setup_iptables();
 };

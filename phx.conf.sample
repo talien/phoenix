@@ -1,13 +1,12 @@
 # sample config file
 #zones
+[zones]
+	local = 10.0.0.0/8
+	internet = 0.0.0.0/0
 
 [rule]
 	program = /usr/bin/ssh
 	verdict = accept
-
-[zones]
-	local = 10.0.0.0/8
-	internet = 0.0.0.0/0
 
 # aliases for users
 # root user's program will be asked on user user's GUI
