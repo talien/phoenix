@@ -12,7 +12,9 @@ typedef struct phx_config
 	int debug_level;
 	int logging_mode;
 	int enable_core;
+    int log_file_fd;
 	gchar* conf_file;
+    gchar* log_file_name;
 	GString* zone_file;
 	GString* rule_file;
 	struct radix_bit* zones;

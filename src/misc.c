@@ -42,12 +42,26 @@ static char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7',
 
 void phx_init_log()
 {
-	openlog("phoenix", 0, LOG_DAEMON);
+    if (global_cfg->logging_mode == PHX_CFG_LOG_SYSLOG)
+    {
+	    openlog("phoenix", 0, LOG_DAEMON);
+    }
+    else if (global_cfg->logging_mode == PHX_CFG_LOG_FILE)
+    {
+        global_cfg->log_file_fd = open(global_cfg->log_file_name, O_APPEND | O_CREAT | O_RDWR, 0);
+    }
 };
 
 void phx_close_log()
 {
-	closelog();
+    if (global_cfg->logging_mode == PHX_CFG_LOG_SYSLOG)
+    {
+	   closelog();
+    }
+    else if (global_cfg->logging_mode == PHX_CFG_LOG_FILE)
+    {
+        close(global_cfg->log_file_fd);
+    }
 };
 
 void
@@ -55,8 +69,10 @@ _log_trace( int debug, const char* function, const char* file, int line, gchar* 
 {
     va_list l;
     gchar msgbuf[2048];
+    gchar file_line[2500];
     struct timeval tv;
     int sec, msec;
+    int size;
     if (!gettimeofday(&tv,NULL)) 
     {
 		sec = tv.tv_sec;
@@ -70,6 +86,9 @@ _log_trace( int debug, const char* function, const char* file, int line, gchar* 
 		case PHX_CFG_LOG_SYSLOG: syslog(LOG_INFO, "%s", msgbuf);
 								 break;
 		case PHX_CFG_LOG_STDERR: printf ("[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
+								 break;
+		case PHX_CFG_LOG_FILE: size = g_snprintf(file_line, sizeof(file_line), "[%d:%d] %s:%d : %s(): %s", sec, msec, file, line, function, msgbuf);
+                                 write (global_cfg->log_file_fd, file_line, size);
 								 break;
 	};
     va_end (l);

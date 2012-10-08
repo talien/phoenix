@@ -69,7 +69,6 @@ class PhoenixTest(unittest.TestCase):
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
         self.client.send("kakukk\n")
-        #time.sleep(5)
         res = self.server.receive()
         self.assertEqual(res, expected)
         self.assertEqual(self.daemon.process.poll(),None)

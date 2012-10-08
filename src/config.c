@@ -16,11 +16,13 @@ static gint loglevel = -1;
 static gboolean core = FALSE;
 static gboolean version = FALSE;
 static gchar* filename = NULL;
+static gchar* logfilename = NULL;
 
 static GOptionEntry entries[] = 
 {
   {	"syslog", 'l', 0, G_OPTION_ARG_NONE, &syslog, "Log to syslog", NULL },
   {	"stderr", 'e', 0, G_OPTION_ARG_NONE, &lstderr, "Log to stderr", NULL },
+  { "log-file", 'F', 0, G_OPTION_ARG_FILENAME, &logfilename, "Log to file", "filename"},
   {	"loglevel", 'v', 0, G_OPTION_ARG_INT, &loglevel, "Log level, level=D", "D" },
   { "version", 'V', 0, G_OPTION_ARG_NONE, &version, "Printing version and exiting", NULL },
   { "enable-core", 0, 0, G_OPTION_ARG_NONE, &core, "Enabling core dumps", NULL },
@@ -68,6 +70,11 @@ void phx_parse_command_line(int* argc, char*** argv)
 	{
 		global_cfg->conf_file = filename;
 	}
+    if (logfilename)
+    {
+    	global_cfg->logging_mode = PHX_CFG_LOG_FILE;
+        global_cfg->log_file_name = logfilename;
+    }
 }
 
 char get_first_char(const char* line)
