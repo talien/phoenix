@@ -48,7 +48,7 @@ void phx_init_log()
     }
     else if (global_cfg->logging_mode == PHX_CFG_LOG_FILE)
     {
-        global_cfg->log_file_fd = open(global_cfg->log_file_name, O_APPEND | O_CREAT | O_RDWR, 0);
+        global_cfg->log_file_fd = open(global_cfg->log_file_name, O_APPEND | O_CREAT | O_RDWR, 0660);
     }
 };
 

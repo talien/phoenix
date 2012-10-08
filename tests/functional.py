@@ -2,7 +2,7 @@
 
 import subprocess, time
 import select, os
-import unittest
+import unittest, re
 
 class Process(object):
     process = None
@@ -41,24 +41,41 @@ class ClientNetcat(Netcat):
     def __init__(self, host, port):
         super(ClientNetcat, self).__init__(["/bin/netcat",host,"%s" % port])
 
-
-class PhoenixTest(unittest.TestCase):
-
+class PhoenixTestMixin:
     def create_config(self, data):
+        try:
+            os.unlink("test.conf")
+        except:
+            pass
         conf = open("test.conf","w")
         conf.write(data)
         conf.close()
 
+    def file_has_content(self, file_name, content):
+        f = open(file_name,"r")
+        for line in f:
+            if re.search(content, line) != None:
+                return True
+        return False
+
+class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
+    def test_create_log_file(self):
+        os.unlink("test.log")
+        self.create_config("[zones]\ninternet = 0.0.0.0/0\n")
+        daemon = Process(["../src/phoenix","-F","test.log","-v","9","-f","test.conf"])
+        time.sleep(1)
+        self.assertEqual(daemon.process.poll(), None)
+        self.assertTrue(os.path.exists("test.log"))
+        self.assertTrue(self.file_has_content("test.log","phoenix firewall starting up"))
+        daemon.stop()
+
+class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
     def stop_processes(self):
         self.client.stop()
         self.server.stop()
         self.daemon.stop()
 
     def setUp(self):
-        try:
-            os.unlink("test.conf")
-        except:
-            pass
         os.system("iptables -F")
         os.system("iptables -X")
  
