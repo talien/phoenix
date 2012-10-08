@@ -69,6 +69,7 @@ TODO:
   - stub kliens írása.
   - alapvető use-case-ek lefedése tesztekkel.
    - kezdeti teszt framework
+ - queue init elfailel->nomrális hibaüzi, és kilépés, nem segfault.
  - eventlog - vagy vmilyen logging modell.
  - tesztelés: connection burst
  - inotify a processekre, amik meg vannak jegyezve pid alapján, ha a process bejegyzés megszünik
