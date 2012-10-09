@@ -8,7 +8,7 @@ class Process(object):
     process = None
     def __init__(self, args):
         self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.STDOUT)
-        print "Process created, pid='%s', args='%r'" % (self.process.pid, args)
+        #print "Process created, pid='%s', args='%r'" % (self.process.pid, args)
         time.sleep(0.2)
 
     def stop(self):
@@ -41,6 +41,36 @@ class ClientNetcat(Netcat):
     def __init__(self, host, port):
         super(ClientNetcat, self).__init__(["/bin/netcat",host,"%s" % port])
 
+class Zone:
+    def __init__(self,values):
+        self.values = values
+
+    def generate(self):
+        result = "[zones]\n"
+        for value in self.values:
+            result += "%s = %s\n" % (value[0], value[1])
+        return result
+
+class PhoenixConfig:
+    def __init__(self, filename, sections):
+        self.sections = sections
+        self.filename = filename
+
+    def generate(self):
+        result = ""
+        for section in self.sections:
+            result += section.generate()
+        return result
+
+    def write(self):
+        try:
+            os.unlink(self.filename)
+        except:
+            pass
+        conf = open(self.filename,"w")
+        conf.write(self.generate())
+        conf.close()
+
 class PhoenixTestMixin:
     def create_config(self, data):
         try:
@@ -59,9 +89,15 @@ class PhoenixTestMixin:
         return False
 
 class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
+    def setUp(self):
+        self.config = PhoenixConfig("test.conf",[Zone([("internet","0.0.0.0/0")])])
+        self.config.write()
+        
     def test_create_log_file(self):
-        os.unlink("test.log")
-        self.create_config("[zones]\ninternet = 0.0.0.0/0\n")
+        try:
+            os.unlink("test.log")
+        except:
+            pass
         daemon = Process(["../src/phoenix","-F","test.log","-v","9","-f","test.conf"])
         time.sleep(1)
         self.assertEqual(daemon.process.poll(), None)
@@ -82,7 +118,7 @@ class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
     def make_test(self, config, expected):
         self.create_config(config)
         self.daemon = Process(["../src/phoenix","-f","test.conf","-l","-v","9"])
-        print self.daemon.process.pid
+        #print self.daemon.process.pid
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
         self.client.send("kakukk\n")
