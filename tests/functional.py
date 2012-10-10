@@ -8,7 +8,9 @@ class Process(object):
     process = None
     def __init__(self, args):
         self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.STDOUT)
-        #print "Process created, pid='%s', args='%r'" % (self.process.pid, args)
+        msg = "Process created, pid='%s', args='%r'" % (self.process.pid, args)
+        os.system("logger \"%s\"" % msg ) 
+        print msg
         time.sleep(0.2)
 
     def stop(self):
@@ -22,7 +24,7 @@ class Netcat(Process):
         if self.process.poll() == None:
             self.process.stdin.write(data)
         else:
-           print "Process does not exists, pid=%s" % self.process.pid
+           print "Send failed: Process does not exists, pid=%s" % self.process.pid
         time.sleep(0.2)
 
     def receive(self):
@@ -41,15 +43,23 @@ class ClientNetcat(Netcat):
     def __init__(self, host, port):
         super(ClientNetcat, self).__init__(["/bin/netcat",host,"%s" % port])
 
-class Zone:
+class PhxConfigItem:
+    section_name = ""
     def __init__(self,values):
         self.values = values
 
     def generate(self):
-        result = "[zones]\n"
+        result = "[%s]\n" % self.section_name
         for value in self.values:
             result += "%s = %s\n" % (value[0], value[1])
         return result
+
+
+class Zone(PhxConfigItem):
+    section_name = "zones"
+
+class Rule(PhxConfigItem):
+    section_name = "rule"
 
 class PhoenixConfig:
     def __init__(self, filename, sections):
@@ -63,13 +73,17 @@ class PhoenixConfig:
         return result
 
     def write(self):
+        self.remove()
+        conf = open(self.filename,"w")
+        conf.write(self.generate())
+        conf.close()
+
+    def remove(self):
         try:
             os.unlink(self.filename)
         except:
             pass
-        conf = open(self.filename,"w")
-        conf.write(self.generate())
-        conf.close()
+       
 
 class PhoenixTestMixin:
     def create_config(self, data):
@@ -88,22 +102,64 @@ class PhoenixTestMixin:
                 return True
         return False
 
+    def reset_iptables(self):
+        os.system("iptables -F")
+        os.system("iptables -X")
+
 class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
     def setUp(self):
         self.config = PhoenixConfig("test.conf",[Zone([("internet","0.0.0.0/0")])])
         self.config.write()
+        self.reset_iptables()
         
     def test_create_log_file(self):
         try:
             os.unlink("test.log")
         except:
             pass
-        daemon = Process(["../src/phoenix","-F","test.log","-v","9","-f","test.conf"])
+        self.daemon = Process(["../src/phoenix","-F","test.log","-v","9","-f","test.conf"])
         time.sleep(1)
-        self.assertEqual(daemon.process.poll(), None)
+        self.assertEqual(self.daemon.process.poll(), None)
         self.assertTrue(os.path.exists("test.log"))
         self.assertTrue(self.file_has_content("test.log","phoenix firewall starting up"))
-        daemon.stop()
+        self.daemon.stop()
+    
+    def tearDown(self):
+        self.daemon.stop()
+
+class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
+
+    def stop_processes(self):
+        self.client.stop()
+        self.server.stop()
+        self.daemon.stop()
+        self.gui.stop()
+
+    def ask_gui_test_skeleton(self, verdict, expected):
+        self.config = PhoenixConfig("test.conf",[Zone([("internet","0.0.0.0/0")]),\
+                                                 Rule([("program","/bin/nc.traditional"),("direction","in"),("verdict","accept")])])
+
+        self.config.write()
+        self.daemon = Process(["../src/phoenix","-f","test.conf","-l","-v","9"])
+        self.gui = Process(["./testclient.py", "-v",verdict])
+        #print self.daemon.process.pid
+        self.server = ServerNetcat(5000)
+        self.client = ClientNetcat("localhost", 5000)
+        self.client.send("kakukk\n")
+        res = self.server.receive()
+        self.assertEqual(res, expected)
+        self.assertEqual(self.daemon.process.poll(),None)
+        self.stop_processes()
+
+    def test_ask_gui_allow_conn(self):
+        self.ask_gui_test_skeleton("1","kakukk\n")
+        
+    def test_ask_gui_deny_conn(self):
+        self.ask_gui_test_skeleton("2",None)
+    
+    def tearDown(self):
+        self.stop_processes()
+        self.config.remove()
 
 class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
     def stop_processes(self):
@@ -112,8 +168,7 @@ class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
         self.daemon.stop()
 
     def setUp(self):
-        os.system("iptables -F")
-        os.system("iptables -X")
+        self.reset_iptables()
  
     def make_test(self, config, expected):
         self.create_config(config)
