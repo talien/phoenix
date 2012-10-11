@@ -1,8 +1,17 @@
 #!/usr/bin/python
 
 import subprocess, time
-import select, os
+import select, os, sys
 import unittest, re
+
+def get_dir_of_current_file():
+    return os.path.dirname(os.path.realpath(sys.argv[0]))
+
+def get_phoenix_path():
+    return get_dir_of_current_file() + "/../src/phoenixd"
+
+def get_stub_client_path():
+    return get_dir_of_current_file() + "/testclient.py"
 
 class Process(object):
     process = None
@@ -11,7 +20,7 @@ class Process(object):
         msg = "Process created, pid='%s', args='%r'" % (self.process.pid, args)
         os.system("logger \"%s\"" % msg ) 
         print msg
-        time.sleep(0.2)
+        time.sleep(1)
 
     def stop(self):
         if self.process.poll() ==  None:
@@ -117,7 +126,7 @@ class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
             os.unlink("test.log")
         except:
             pass
-        self.daemon = Process(["../src/phoenix","-F","test.log","-v","9","-f","test.conf"])
+        self.daemon = Process([get_phoenix_path(),"-F","test.log","-v","9","-f","test.conf"])
         time.sleep(1)
         self.assertEqual(self.daemon.process.poll(), None)
         self.assertTrue(os.path.exists("test.log"))
@@ -140,7 +149,7 @@ class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
                                                  Rule([("program","/bin/nc.traditional"),("direction","in"),("verdict","accept")])])
 
         self.config.write()
-        self.daemon = Process(["../src/phoenix","-f","test.conf","-l","-v","9"])
+        self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
         self.gui = Process(["./testclient.py", "-v",verdict])
         #print self.daemon.process.pid
         self.server = ServerNetcat(5000)
@@ -172,7 +181,7 @@ class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
  
     def make_test(self, config, expected):
         self.create_config(config)
-        self.daemon = Process(["../src/phoenix","-f","test.conf","-l","-v","9"])
+        self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
         #print self.daemon.process.pid
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
