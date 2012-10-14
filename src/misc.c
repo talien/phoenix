@@ -231,7 +231,7 @@ void restore_iptables()
     }
     close(fd);
     close(rfd);
-
+    unlink("phx.tables");
 }
 
 void setup_iptables()

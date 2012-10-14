@@ -16,7 +16,7 @@ def get_stub_client_path():
 class Process(object):
     process = None
     def __init__(self, args):
-        self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.STDOUT)
+        self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,close_fds=True)
         msg = "Process created, pid='%s', args='%r'" % (self.process.pid, args)
         os.system("logger \"%s\"" % msg ) 
         print msg
@@ -46,7 +46,7 @@ class Netcat(Process):
    
 class ServerNetcat(Netcat):
     def __init__(self, port):
-        super(ServerNetcat, self).__init__(["/bin/netcat","-l","-p","%s" % port])
+        super(ServerNetcat, self).__init__(["/bin/netcat","-l","-vv","-p","%s" % port])
 
 class ClientNetcat(Netcat):
     def __init__(self, host, port):
@@ -150,8 +150,7 @@ class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
 
         self.config.write()
         self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
-        self.gui = Process(["./testclient.py", "-v",verdict])
-        #print self.daemon.process.pid
+        self.gui = Process([get_stub_client_path(), "-v",verdict])
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
         self.client.send("kakukk\n")
@@ -182,7 +181,6 @@ class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
     def make_test(self, config, expected):
         self.create_config(config)
         self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
-        #print self.daemon.process.pid
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
         self.client.send("kakukk\n")
