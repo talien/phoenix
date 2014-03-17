@@ -80,6 +80,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
   struct phx_conn_data *conndata;
   struct phx_app_rule *rule;
   guint32 nfq_verdict, mark;
+  nf_queue_data *qdata;
 
   log_debug("General callback called\n");
 
@@ -87,25 +88,16 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
   pkt_len = phx_extract_nfq_pkt_data(nfad, &id, &payload);
   log_debug("Packet info: id='%d', len='%d'\n", id, pkt_len);
 
-  conndata = phx_conn_data_new();
-
-  //deciding if connection is inbound, very hackish, need rewrite
-  queue_num = *((int*)data);
-
-  if (queue_num == 0 || queue_num == 3)
-    {
-      direction = OUTBOUND;
-    }
-  else
-    {
-      direction = INBOUND;
-    }
-  if (queue_num == 2 || queue_num == 3)
-    pending = 1;
+  qdata = (nf_queue_data *)data;
+  queue_num = qdata->queue_number;
+  direction = qdata->direction;
+  pending = qdata->pending;
 
   log_debug("Callback info; pending='%d', direction='%d'\n", pending, direction);
 
   // extracting connection data from payload
+  conndata = phx_conn_data_new();
+
   extr_res = phx_data_extract(payload, conndata, direction);
   if (extr_res <= 0)
     {
@@ -252,7 +244,8 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
         {
           //no rule in pending queue, what should i do? pushing back doesn't hurt...
           log_debug("No rule found in pending queue, hoping that pushing back doesn't hurt\n");
-          nfq_verdict = NF_QUEUE;
+          nfq_verdict = NF_QUEUE | ( ( OUTBOUND ? 3 : 2 ) << 16);
+
         }
       else
         {

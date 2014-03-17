@@ -4,8 +4,20 @@
 
 int nf_queue_init(nf_queue_data* qdata, int queue_num, nfq_callback *cb)
 {
-  qdata->callback_data = queue_num;
   qdata->handle = nfq_open();
+  qdata->queue_number = queue_num;
+
+  if (queue_num == 0 || queue_num == 3)
+    {
+      qdata->direction = OUTBOUND;
+    }
+  else
+    {
+      qdata->direction = INBOUND;
+    }
+  if (queue_num == 2 || queue_num == 3)
+    qdata->pending = 1;
+
   if (!(qdata->handle))
     {
       log_error("Error occured during opening netfilter queue");
@@ -23,7 +35,7 @@ int nf_queue_init(nf_queue_data* qdata, int queue_num, nfq_callback *cb)
       return -1;
     }
   log_debug("Creating netfilter queue\n");
-  qdata->queue_handle = nfq_create_queue(qdata->handle, queue_num, cb, &qdata->callback_data);
+  qdata->queue_handle = nfq_create_queue(qdata->handle, queue_num, cb, qdata);
   if (!qdata->queue_handle)
     {
       log_error("Error in creating queue");
@@ -63,7 +75,7 @@ int nf_queue_handle_packet(nf_queue_data* qdata)
   int rv = recv(qdata->fd, buf, sizeof(buf), MSG_DONTWAIT);
   if (rv > 0)
     {
-      log_debug("Packet received in %s queue\n", get_name_from_queue_number(qdata->callback_data));
+      log_debug("Packet received in %s queue\n", get_name_from_queue_number(qdata->queue_number));
       nfq_handle_packet(qdata->handle, buf, rv);
       log_debug("Packet handled\n");
       return TRUE;
