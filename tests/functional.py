@@ -20,7 +20,7 @@ class Process(object):
         msg = "Process created, pid='%s', args='%r'" % (self.process.pid, args)
         os.system("logger \"%s\"" % msg ) 
         print msg
-        time.sleep(1)
+        time.sleep(0.2)
 
     def stop(self):
         if self.process.poll() ==  None:
@@ -95,6 +95,9 @@ class PhoenixConfig:
        
 
 class PhoenixTestMixin:
+    def start_phoenix(self, config_file):
+        return Process([get_phoenix_path(),"-F","test.log","-v","9","-f","test.conf"])
+
     def create_config(self, data):
         try:
             os.unlink("test.conf")
@@ -126,8 +129,8 @@ class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
             os.unlink("test.log")
         except:
             pass
-        self.daemon = Process([get_phoenix_path(),"-F","test.log","-v","9","-f","test.conf"])
-        time.sleep(1)
+        self.daemon = self.start_phoenix("test.conf")
+        time.sleep(0.5)
         self.assertEqual(self.daemon.process.poll(), None)
         self.assertTrue(os.path.exists("test.log"))
         self.assertTrue(self.file_has_content("test.log","phoenix firewall starting up"))
@@ -149,7 +152,7 @@ class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
                                                  Rule([("program","/bin/nc.traditional"),("direction","in"),("verdict","accept")])])
 
         self.config.write()
-        self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
+        self.daemon = self.start_phoenix("test.conf")
         self.gui = Process([get_stub_client_path(), "-v",verdict])
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
@@ -180,7 +183,7 @@ class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
  
     def make_test(self, config, expected):
         self.create_config(config)
-        self.daemon = Process([get_phoenix_path(),"-f","test.conf","-l","-v","9"])
+        self.daemon = self.start_phoenix("test.conf")
         self.server = ServerNetcat(5000)
         self.client = ClientNetcat("localhost", 5000)
         self.client.send("kakukk\n")
