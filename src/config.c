@@ -269,7 +269,10 @@ int phx_parse_config(const char* filename)
 	}
 
 	if (!conffile)
-		return FALSE;
+    {
+      log_error("Failed to open config file!\n");
+		  return FALSE;
+    }
 
 	while (fgets(fbuf, sizeof(fbuf), conffile) != NULL)
 	{
