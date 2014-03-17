@@ -198,7 +198,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
 			else
 			{
 				log_debug("Program %s found in list, question to GUI already asked, skipping in pending queue\n", conndata->proc_name->str);
-				nfq_verdict = NF_QUEUE;
+				nfq_verdict = NF_QUEUE | ( ( OUTBOUND ? 3 : 2 ) << 16);
 			}
 		}
 		if (rule->verdict == ASK)
