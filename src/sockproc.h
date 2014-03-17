@@ -17,4 +17,5 @@ int get_proc_from_conn(struct phx_conn_data* c,int direction);
 int get_pid_from_sock(int socknum);
 int check_pid_exists(int pid);
 GString* get_user(guint32 pid);
+GString* get_command_line(guint32 pid);
 #endif
