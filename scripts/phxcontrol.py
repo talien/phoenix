@@ -554,7 +554,7 @@ class MainWindow(gtk.Window):
         chooser.set_default_response(gtk.RESPONSE_OK)
         response = chooser.run()
         if response == gtk.RESPONSE_OK:
-            self.cfg.export_list_store(chooser.get_filename())
+            self.cfg.export_rules(chooser.get_filename())
         chooser.destroy()
 
 
@@ -623,7 +623,7 @@ class MainWindow(gtk.Window):
         rulestore = self.cfg.liststore
         self.rule = Rule(rulestore.get_value(riter, 0), rulestore.get_value(riter, 1),rulestore.get_value(riter, 2),rulestore.get_value(riter, 3),rulestore.get_value(riter, 4),rulestore.get_value(riter, 5),rulestore.get_value(riter, 6), rulestore.get_value(riter, 7))
         self.cfg.change_store.append(("DELETE", self.rule))
-        refresh_liststore(self.cfg.liststore, self.cfg.apptable, self.cfg.change_store)
+        self.cfg.refresh_liststore()
 
     def rule_commit_clicked(self, widget, data = None):
         data = phx_serialize_changes(self.cfg.change_store)
