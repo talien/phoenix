@@ -3,3 +3,5 @@ Makefile
 Makefile.in
 config*
 .deps
+ltmain.sh
+autom4te.cache/*
