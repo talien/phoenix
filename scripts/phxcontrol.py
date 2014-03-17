@@ -73,6 +73,12 @@ class Rule:
             result += " verdict = accepted\n"
         elif self.verdict == 2:
             result += " verdict = denied\n"
+
+        if self.direction == 0:
+            result += " direction = out\n"
+        elif self.direction == 1:
+            result += " direction = in\n"
+
         return result
     def parse(self, data, position, zones):
         debug("Data: %r, position:%d" % (data,position))
