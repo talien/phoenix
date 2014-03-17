@@ -5,12 +5,16 @@ AC_PREREQ([2.67])
 AC_INIT([phoenix], [0.1], [tusavik@gmail.com])
 AM_INIT_AUTOMAKE
 
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([no])])
+
 # Checks for programs.
 AC_PROG_CC
+PKG_PROG_PKG_CONFIG
+
+LT_INIT([shared dlopen])
 
 # Checks for libraries.
-# FIXME: Replace `main' with a function in `-lnetfilter_queue':
-AC_CHECK_LIB([netfilter_queue], [main])
+PKG_CHECK_MODULES(NFQ, libnetfilter_queue)
 PKG_CHECK_MODULES([DEPS],[glib-2.0 > 2.20 gthread-2.0 > 2.20])
 
 # Checks for header files.
