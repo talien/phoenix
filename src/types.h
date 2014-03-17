@@ -18,18 +18,18 @@
 
 typedef struct phx_conn_data
 {
-   GString* proc_name;
-   GString* cmd_line;
-   guint32 pid;
-   guchar srcip[4];
-   guint32 sport;
-   guchar destip[4];
-   guint32 dport;
-   guint32 state;
-   guint32 direction;
-   guint32 refcnt;
-   guint32 srczone;
-   guint32 destzone;
+  GString* proc_name;
+  GString* cmd_line;
+  guint32 pid;
+  guchar srcip[4];
+  guint32 sport;
+  guchar destip[4];
+  guint32 dport;
+  guint32 state;
+  guint32 direction;
+  guint32 refcnt;
+  guint32 srczone;
+  guint32 destzone;
 } phx_conn_data;
 
 typedef struct phx_app_rule

@@ -20,10 +20,10 @@
 } nf_queue_data;*/
 typedef struct phx_queues
 {
-    nf_queue_data in;
-    nf_queue_data out;
-    nf_queue_data in_pending;
-    nf_queue_data out_pending;
+  nf_queue_data in;
+  nf_queue_data out;
+  nf_queue_data in_pending;
+  nf_queue_data out_pending;
 
 } phx_queues;
 

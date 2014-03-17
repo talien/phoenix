@@ -6,11 +6,11 @@
 
 typedef struct radix_bit
 {
-	int bit;
-	struct radix_bit *zero;
-	struct radix_bit *one;
-	struct radix_bit *parent;
-	int zoneid;
+  int bit;
+  struct radix_bit *zero;
+  struct radix_bit *one;
+  struct radix_bit *parent;
+  int zoneid;
 } radix_bit;
 
 

@@ -9,24 +9,24 @@
 
 typedef struct phx_config
 {
-	int debug_level;
-	int logging_mode;
-	int enable_core;
-    int log_file_fd;
-	gchar* conf_file;
-    gchar* log_file_name;
-	GString* zone_file;
-	GString* rule_file;
-	struct radix_bit* zones;
-	GString** zone_names;
-	GHashTable* aliases;
-	gboolean inbound_deny, outbound_deny;
+  int debug_level;
+  int logging_mode;
+  int enable_core;
+  int log_file_fd;
+  gchar* conf_file;
+  gchar* log_file_name;
+  GString* zone_file;
+  GString* rule_file;
+  struct radix_bit* zones;
+  GString** zone_names;
+  GHashTable* aliases;
+  gboolean inbound_deny, outbound_deny;
 } phx_config;
 
 #ifdef _PHX_CONFIG_C
-	phx_config* global_cfg;
+phx_config* global_cfg;
 #else
-	extern phx_config* global_cfg;
+extern phx_config* global_cfg;
 #endif
 
 void phx_init_config(int* argc, char*** argv);
