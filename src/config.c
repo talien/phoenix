@@ -1,6 +1,7 @@
 #define _PHX_CONFIG_C
 #include "config.h"
 #include "misc.h"
+#include "zones.h"
 #include <glib.h>
 #include <sys/resource.h>
 #include <errno.h>
