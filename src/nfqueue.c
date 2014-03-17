@@ -49,13 +49,21 @@ void nf_queue_close(nf_queue_data* qdata)
     nfq_close(qdata->handle);
 }
 
+const char * get_name_from_queue_number(int queue_num)
+{
+  if (queue_num == 0) return "out-new";
+  if (queue_num == 1) return "in-new";
+  if (queue_num == 2) return "in-pending";
+  if (queue_num == 3) return "out-pending";
+};
+
 int nf_queue_handle_packet(nf_queue_data* qdata)
 {
     char buf[65536];
     int rv = recv(qdata->fd, buf, sizeof(buf), MSG_DONTWAIT);
     if (rv > 0)
     {
-        log_debug("Packet received in outbound pending queue\n");
+        log_debug("Packet received in %s queue\n", get_name_from_queue_number(qdata->callback_data));
         nfq_handle_packet(qdata->handle, buf, rv);
         log_debug("Packet handled\n");
         return TRUE;
