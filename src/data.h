@@ -32,7 +32,7 @@ typedef struct phx_queues
 
 #ifdef _PHX_DAEMON_C
 
-phx_queues qdata;
+phx_queues global_queue_data;
 GAsyncQueue *to_gui;
 int pending_conn_count = 0;
 int in_pending_count = 0;
@@ -40,7 +40,7 @@ GMutex* zone_mutex;
 
 #else
 
-extern nf_queue_data qdata;
+extern phx_queues global_queue_data;
 extern GAsyncQueue *to_gui;
 extern int pending_conn_count;
 extern int in_pending_count;

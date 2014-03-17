@@ -258,20 +258,20 @@ gint main_loop_iterate()
 {
   int ret;
 
-  polls[0].fd = qdata.out.fd;
+  polls[0].fd = global_queue_data.out.fd;
   polls[0].events = POLLIN | POLLPRI;
-  polls[1].fd = qdata.in.fd;
+  polls[1].fd = global_queue_data.in.fd;
   polls[1].events = POLLIN | POLLPRI;
   ret = poll(polls, 2, -1);
   if (ret > 0)
     {
       if ((polls[0].revents & POLLIN) || (polls[0].revents & POLLPRI))
         {
-          while (nf_queue_handle_packet(&qdata.out)) {};
+          while (nf_queue_handle_packet(&global_queue_data.out)) {};
         }
       if ((polls[1].revents & POLLIN) || (polls[1].revents & POLLPRI))
         {
-          while (nf_queue_handle_packet(&qdata.in)) {};
+          while (nf_queue_handle_packet(&global_queue_data.in)) {};
         }
 
     }
@@ -299,9 +299,9 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
       int ret;
       int now_count;
 
-      polls[0].fd = qdata.out_pending.fd;
+      polls[0].fd = global_queue_data.out_pending.fd;
       polls[0].events = POLLIN | POLLPRI;
-      polls[1].fd = qdata.in_pending.fd;
+      polls[1].fd = global_queue_data.in_pending.fd;
       polls[1].events = POLLIN | POLLPRI;
       log_debug("Polling in pending thread\n");
       ret = poll(polls, 2, 0);
@@ -314,7 +314,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
               now_count = pending_conn_count;
               for (i = 0; i < now_count; i++)
                 {
-                  nf_queue_handle_packet(&qdata.out_pending);
+                  nf_queue_handle_packet(&global_queue_data.out_pending);
                 }
             }
           if (((polls[1].revents & POLLIN)
@@ -323,7 +323,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
               now_count = in_pending_count;
               for (i = 0; i < now_count; i++)
                 {
-                  nf_queue_handle_packet(&qdata.in_pending);
+                  nf_queue_handle_packet(&global_queue_data.in_pending);
                 }
             }
         }
@@ -343,10 +343,10 @@ int main(int argc, char **argv)
   log_error("phoenix firewall starting up\n");
   log_debug("Opening netlink connections\n");
 
-  nf_queue_init(&qdata.out, 0, phx_queue_callback);
-  nf_queue_init(&qdata.in, 1, phx_queue_callback);
-  nf_queue_init(&qdata.in_pending, 2, phx_queue_callback);
-  nf_queue_init(&qdata.out_pending, 3, phx_queue_callback);
+  nf_queue_init(&global_queue_data.out, 0, phx_queue_callback);
+  nf_queue_init(&global_queue_data.in, 1, phx_queue_callback);
+  nf_queue_init(&global_queue_data.in_pending, 2, phx_queue_callback);
+  nf_queue_init(&global_queue_data.out_pending, 3, phx_queue_callback);
 
   log_debug("Netlink connections opened\n");
 
@@ -388,10 +388,10 @@ exit:
 
   log_debug("Closing netlink connections\n");
 
-  nf_queue_close(&qdata.out);
-  nf_queue_close(&qdata.in);
-  nf_queue_close(&qdata.out_pending);
-  nf_queue_close(&qdata.in_pending);
+  nf_queue_close(&global_queue_data.out);
+  nf_queue_close(&global_queue_data.in);
+  nf_queue_close(&global_queue_data.out_pending);
+  nf_queue_close(&global_queue_data.in_pending);
 
   log_debug("Thread exited!\n");
   if (pending_thread)

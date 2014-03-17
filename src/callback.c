@@ -252,8 +252,7 @@ int phx_queue_callback(struct nfq_q_handle *qh, struct nfgenmsg *mfmsg G_GNUC_UN
         {
           //no rule in pending queue, what should i do? pushing back doesn't hurt...
           log_debug("No rule found in pending queue, hoping that pushing back doesn't hurt\n");
-          nfq_verdict = NF_QUEUE | ( ( OUTBOUND ? 3 : 2 ) << 16);
-
+          nfq_verdict = NF_QUEUE;
         }
       else
         {
