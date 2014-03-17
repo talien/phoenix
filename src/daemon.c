@@ -23,6 +23,7 @@
 #include "zones.h"
 #include "config.h"
 #include "data.h"
+#include "apptable.h"
 
 #define PHX_SOCKET_PATH "/var/run/"
 #define PHX_CLIENT_PATH "/tmp/"
