@@ -108,7 +108,7 @@ gpointer daemon_socket_thread(gpointer data G_GNUC_UNUSED)
 	daemon_socket = init_daemon_socket();
 	log_debug("Starting daemon control socket thread\n");
 	if (daemon_socket == -1)
-		return -1;
+		return (gpointer)-1;
 	while (1)
 	{
 		remote_sock = accept(daemon_socket, (struct sockaddr*)&remote, &rsock_len);
