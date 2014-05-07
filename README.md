@@ -47,3 +47,4 @@ Usage:
 
  ``` sudo phoenixd -f phoenix.conf ```
 
+WARNING! phoenixd erases the iptables filter table and sets up it's own rules. It is not supported to use it together with other firewall solutions!
