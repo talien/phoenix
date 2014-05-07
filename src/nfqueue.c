@@ -20,6 +20,8 @@
 #include "nfqueue.h"
 #include "misc.h"
 #include <glib.h>
+#include <errno.h>
+#include <string.h>
 
 int nf_queue_init(nf_queue_data* qdata, int queue_num, nfq_callback *cb)
 {
@@ -54,16 +56,16 @@ int nf_queue_init(nf_queue_data* qdata, int queue_num, nfq_callback *cb)
       return -1;
     }
   log_debug("Creating netfilter queue\n");
-  qdata->queue_handle = nfq_create_queue(qdata->handle, queue_num, cb, qdata);
+  qdata->queue_handle = nfq_create_queue(qdata->handle, qdata->queue_number, cb, qdata);
   if (!qdata->queue_handle)
     {
-      log_error("Error in creating queue");
+      log_error("Error in creating queue, error='%s'\n", strerror(errno));
       return -1;
     }
   log_debug("Setting mode for netfilter queue\n");
   if (nfq_set_mode(qdata->queue_handle, NFQNL_COPY_PACKET, 0) < 0)
     {
-      log_error("Error setting netfilter queue mode");
+      log_error("Error setting netfilter queue mode\n");
       return -1;
     }
   qdata->fd = nfq_fd(qdata->handle);
