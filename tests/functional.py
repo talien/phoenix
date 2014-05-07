@@ -22,19 +22,27 @@ import subprocess, time
 import select, os, sys
 import unittest, re
 
+phoenixd_path = os.environ['PHOENIXD_PATH']
+
 def get_dir_of_current_file():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
 
 def get_phoenix_path():
-    return get_dir_of_current_file() + "/../src/phoenixd"
+    return phoenixd_path + "/phoenixd"
 
 def get_stub_client_path():
     return get_dir_of_current_file() + "/testclient.py"
 
+class ProcessException(Exception):
+    pass
+
 class Process(object):
     process = None
     def __init__(self, args):
-        self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,close_fds=True)
+        try:
+          self.process = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.PIPE,close_fds=True)
+        except:
+          raise ProcessException("Failed to start process %s" % args[0])
         msg = "Process created, pid='%s', args='%r'" % (self.process.pid, args)
         os.system("logger \"%s\"" % msg ) 
         print msg
@@ -113,6 +121,24 @@ class PhoenixConfig:
        
 
 class PhoenixTestMixin:
+
+    def register_process(self, name, process):
+        if not hasattr(self, "processes"):
+           self.processes = {}
+
+        self.processes[name] = process
+
+    def stop_process(self, process):
+        if process:
+           process.stop()
+
+    def stop_processes(self):
+        if not hasattr(self, "processes"):
+           return
+
+        for process in self.processes.values():
+           process.stop()
+
     def start_phoenix(self, config_file):
         return Process([get_phoenix_path(),"-F","test.log","-v","9","-f","test.conf"])
 
@@ -147,38 +173,32 @@ class PhoenixLogTest(unittest.TestCase,PhoenixTestMixin):
             os.unlink("test.log")
         except:
             pass
-        self.daemon = self.start_phoenix("test.conf")
+        self.register_process('daemon', self.start_phoenix("test.conf"))
         time.sleep(0.5)
-        self.assertEqual(self.daemon.process.poll(), None)
+        self.assertEqual(self.processes['daemon'].process.poll(), None)
         self.assertTrue(os.path.exists("test.log"))
         self.assertTrue(self.file_has_content("test.log","phoenix firewall starting up"))
-        self.daemon.stop()
     
     def tearDown(self):
-        self.daemon.stop()
+        self.stop_processes()
 
 class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
 
-    def stop_processes(self):
-        self.client.stop()
-        self.server.stop()
-        self.daemon.stop()
-        self.gui.stop()
-
-    def ask_gui_test_skeleton(self, verdict, expected):
+    def setUp(self):
         self.config = PhoenixConfig("test.conf",[Zone([("internet","0.0.0.0/0")]),\
                                                  Rule([("program","/bin/nc.traditional"),("direction","in"),("verdict","accept")])])
 
         self.config.write()
-        self.daemon = self.start_phoenix("test.conf")
-        self.gui = Process([get_stub_client_path(), "-v",verdict])
-        self.server = ServerNetcat(5000)
-        self.client = ClientNetcat("localhost", 5000)
-        self.client.send("kakukk\n")
-        res = self.server.receive()
+
+    def ask_gui_test_skeleton(self, verdict, expected):
+        self.register_process('daemon', self.start_phoenix("test.conf"))
+        self.register_process('gui', Process([get_stub_client_path(), "-v",verdict]))
+        self.register_process('server', ServerNetcat(5000))
+        self.register_process('client', ClientNetcat("localhost", 5000))
+        self.processes['client'].send("kakukk\n")
+        res = self.processes['server'].receive()
         self.assertEqual(res, expected)
-        self.assertEqual(self.daemon.process.poll(),None)
-        self.stop_processes()
+        self.assertEqual(self.processes['daemon'].process.poll(),None)
 
     def test_ask_gui_allow_conn(self):
         self.ask_gui_test_skeleton("1","kakukk\n")
@@ -191,23 +211,19 @@ class PhoenixAskGuiTest(unittest.TestCase,PhoenixTestMixin):
         self.config.remove()
 
 class PhoenixConnTest(unittest.TestCase,PhoenixTestMixin):
-    def stop_processes(self):
-        self.client.stop()
-        self.server.stop()
-        self.daemon.stop()
 
     def setUp(self):
         self.reset_iptables()
  
     def make_test(self, config, expected):
         self.create_config(config)
-        self.daemon = self.start_phoenix("test.conf")
-        self.server = ServerNetcat(5000)
-        self.client = ClientNetcat("localhost", 5000)
-        self.client.send("kakukk\n")
-        res = self.server.receive()
+        self.register_process('daemon', self.start_phoenix("test.conf"))
+        self.register_process('server', ServerNetcat(5000))
+        self.register_process('client', ClientNetcat("localhost", 5000))
+        self.processes['client'].send("kakukk\n")
+        res = self.processes['server'].receive()
         self.assertEqual(res, expected)
-        self.assertEqual(self.daemon.process.poll(),None)
+        self.assertEqual(self.processes['daemon'].process.poll(),None)
         self.stop_processes()
 
     def test_only_out_direction_should_fail(self):
