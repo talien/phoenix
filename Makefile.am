@@ -1,2 +1,5 @@
 AUTOMAKE_OPTIONS = foreign
-SUBDIRS = src scripts tests
+
+include src/Makefile.am
+include scripts/Makefile.am
+include tests/Makefile.am

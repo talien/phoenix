@@ -1,1 +1,1 @@
-bin_SCRIPTS = phxcontrol.py phxclient.py
+bin_SCRIPTS = scripts/phxcontrol.py scripts/phxclient.py
