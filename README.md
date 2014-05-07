@@ -8,6 +8,8 @@ be grouped into zones easing the management of the access control.
 
 Compiling:
 
+Build dependencies on ubuntu: libnetfilter-queue-dev, libglib2.0-dev, build-essential, automake, python-gtk2
+
 ``` 
 autoreconf -i 
 ./configure --prefix /usr
