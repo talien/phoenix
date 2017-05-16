@@ -18,6 +18,7 @@
 */
 
 #include <glib.h>
+#include <stdint.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <sys/socket.h>
 #include <asm/types.h>

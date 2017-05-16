@@ -19,6 +19,7 @@
 
 #ifndef _PHx_CALLBACK_H
 #define _PHX_CALLBACK_H
+#include <stdint.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <stdio.h>
 #include <sys/socket.h>

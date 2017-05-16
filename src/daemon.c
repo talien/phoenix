@@ -20,6 +20,7 @@
 #define _PHX_DAEMON_C
 #include <sys/un.h>
 #include "serialize.h"
+#include <stdint.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <sys/socket.h>
 #include <asm/types.h>
@@ -308,6 +309,7 @@ gpointer pending_thread_run(gpointer data G_GNUC_UNUSED)
 {
   cond_mutex = g_mutex_new();
   pending_cond = g_cond_new();
+  g_mutex_lock(&cond_mutex);
   while (!end)
     {
       g_cond_wait(pending_cond, cond_mutex);

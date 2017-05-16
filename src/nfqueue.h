@@ -19,6 +19,7 @@
 
 #ifndef _PHX_NFQUEUE_H
 #define _PHX_NFQUEUE_H
+#include <stdint.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
 typedef struct _nf_queue_data
